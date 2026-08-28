@@ -181,8 +181,10 @@ td.editing.num{width:1%}
   .tile .v{font-size:20px}
   #dev-body > div{grid-template-columns:1fr !important}
   #p-pending-grid{grid-template-columns:1fr !important}
-  .toolbar{flex-wrap:wrap}
-  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* 넓은 표가 페이지 전체 폭을 늘리지 않도록: 그리드 자식의 최소 폭 해제 → 표는 .tw 안에서만 가로 스크롤 */
+  #dev-body > div > *, #dev-body .card, #p-pending-grid > *{min-width:0;max-width:100%}
+  main, .panel, .card{min-width:0}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
   table{font-size:12px}
 }
 
