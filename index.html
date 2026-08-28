@@ -1,0 +1,2296 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSV 샘플 현황 대시보드</title>
+<style>
+:root{
+  --surface-1:#fcfcfb; --plane:#f9f9f7;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s3:#1baf7a; --critical:#d03b3b;
+  --pending-bg:#fbdea3; --pending-line:#e9c67e;
+  --recv-bg:#d7dbfd; --recv-line:#b9bff5;
+  --changed:#d03b3b;
+  --pa-blue:#e4eafe;  --pa-blue-l:#c3cdf7;  --pa-blue-t:#274ea8;
+  --pa-teal:#dcf3ec;  --pa-teal-l:#b4e2d3;  --pa-teal-t:#136a51;
+  --pa-red:#fbe0e0;   --pa-red-l:#f0bcbc;   --pa-red-t:#a52c2c;
+  --pa-amber:#fdeecd; --pa-amber-l:#f4d79a; --pa-amber-t:#8a6100;
+  --pa-grey:#eeeeea;  --pa-grey-l:#dcdbd3;  --pa-grey-t:#5c5b56;
+  --hot-red:#f6a9a9;  --hot-red-l:#e07a7a;
+  --cut:#2a78d6; --sew:#e0629c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;font-size:15px;font-weight:600}
+header{background:var(--surface-1);border-bottom:1px solid var(--grid);padding:14px 20px 0}
+.hrow{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:19px;margin:0;font-weight:800;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px;font-weight:600}
+.badge{font-size:12px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid var(--ring);color:var(--ink2);background:var(--plane)}
+nav{display:flex;gap:2px;margin-top:12px;align-items:center}
+nav button{background:none;border:none;border-bottom:2px solid transparent;padding:10px 16px;
+  font:inherit;font-size:15px;font-weight:700;color:var(--ink2);cursor:pointer;border-radius:6px 6px 0 0}
+nav button:hover{background:var(--plane)}
+nav button[aria-selected=true]{color:var(--s1);border-bottom-color:var(--s1)}
+main{padding:16px 20px 60px}
+.panel{display:none;border:2px dashed transparent;border-radius:12px}.panel.on{display:block}
+.panel.dropping{border-color:var(--s1);background:#eef4fd}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--surface-1);border:1px solid var(--ring);border-radius:99px;
+  padding:6px 13px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--ink2)}
+.chip[aria-pressed=true]{background:var(--s1);border-color:var(--s1);color:#fff;font-weight:700}
+.chip[aria-pressed=true] *{color:#fff !important}
+.cnt{display:inline-block;min-width:20px;text-align:center;font-size:12px;font-weight:800;
+  border-radius:99px;padding:1px 6px;margin-left:4px;border:1px solid}
+.cnt.recv{background:var(--recv-bg);border-color:var(--recv-line);color:#274ea8}
+.cnt.pend{background:var(--pending-bg);border-color:var(--pending-line);color:#8a6100}
+.chip[aria-pressed=true] .cnt.recv{background:var(--recv-bg) !important}
+.chip[aria-pressed=true] .cnt.recv,{color:#274ea8 !important}
+.chip[aria-pressed=true] .cnt{color:inherit !important}
+.chip[aria-pressed=true] .cnt.recv{color:#274ea8 !important}
+.chip[aria-pressed=true] .cnt.pend{color:#8a6100 !important}
+.spacer{flex:1}
+.btn{background:var(--s1);color:#fff;border:none;border-radius:7px;padding:8px 15px;
+  font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.btn.ghost{background:var(--surface-1);color:var(--ink2);border:1px solid var(--ring)}
+.btn.sm{padding:5px 12px;font-size:13px}
+.btn:hover{filter:brightness(1.06)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.tile{border:1px solid var(--ring);border-radius:12px;padding:14px 16px;background:var(--surface-1)}
+.tile .k{font-size:13px;font-weight:700;letter-spacing:.01em;opacity:.85}
+.tile .v{font-size:34px;font-weight:800;margin-top:4px;letter-spacing:-.02em;line-height:1.1}
+.tile .n{font-size:13px;font-weight:600;margin-top:3px;opacity:.8}
+.tile .subn{font-size:13.5px;font-weight:700;margin-top:3px;opacity:.9}
+.tile.blue {background:var(--pa-blue); border-color:var(--pa-blue-l); color:var(--pa-blue-t)}
+.tile.teal {background:var(--pa-teal); border-color:var(--pa-teal-l); color:var(--pa-teal-t)}
+.tile.red  {background:var(--pa-red);  border-color:var(--pa-red-l);  color:var(--pa-red-t)}
+.tile.amber{background:var(--pa-amber);border-color:var(--pa-amber-l);color:var(--pa-amber-t)}
+.tile.grey {background:var(--pa-grey); border-color:var(--pa-grey-l); color:var(--pa-grey-t)}
+.tile.hot  {background:var(--hot-red); border-color:var(--hot-red-l); color:#6d1414}
+.card{background:var(--surface-1);border:1px solid var(--ring);border-radius:10px;overflow:hidden}
+.card h2{font-size:16px;margin:0;padding:12px 15px;font-weight:800}
+.cardhead{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--grid);padding-right:12px}
+.cardhead h2{flex:1;border:none}
+.tw{overflow:auto;max-height:68vh}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:14px;font-weight:600}
+th{position:sticky;top:0;z-index:2;background:var(--plane);text-align:left;font-weight:800;font-size:14px;
+  color:var(--ink2);padding:8px 9px;border-bottom:1px solid var(--axis);white-space:nowrap}
+th.num{text-align:right}
+td{padding:7px 9px;border-bottom:1px solid var(--grid);vertical-align:top}
+tbody tr:hover{background:#f4f6fa}
+tr.recv{background:var(--recv-bg)} tr.recv:hover{background:#c9cffb}
+tr.pending{background:var(--pending-bg)} tr.pending:hover{background:#f7d38c}
+tr.cancelled{background:#f9d5d5} tr.cancelled:hover{background:#f4c4c4}
+tr.cancelled .cellin,tr.cancelled td{text-decoration:line-through;color:#8c2b2b}
+tr.cancelled .cmt,tr.cancelled .rowdel,tr.cancelled .st{text-decoration:none}
+tr.pending .cmt,tr.recv .cmt{background:rgba(255,255,255,.6)}
+tr.totrow td{background:var(--plane);font-weight:800;border-top:2px solid var(--axis)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.chg{color:var(--changed);font-weight:800}
+td.chg::after{content:none}
+td.chg > .cellin{color:var(--changed);font-weight:800}
+.st{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:700;
+  padding:2px 8px;border-radius:99px;border:1px solid var(--ring);white-space:nowrap;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.st.done{color:#0a7a0a;background:#eaf7ea}
+.st.prog{color:#1c5cab;background:#eaf1fb}
+.st.wait{color:#8a6a00;background:#fdf3d8}
+.st.risk{color:#a92e2e;background:#fbeaea}
+.st.cut{color:#1c5cab;background:#dfeafb;border-color:#bcd4f4}
+.st.sew{color:#a3346a;background:#fbe2ee;border-color:#f2c3da}
+.cmt{width:100%;border:1px dashed var(--axis);border-radius:5px;background:transparent;
+  font:inherit;font-size:13px;font-weight:600;padding:4px 6px;color:var(--ink)}
+.cmt:focus{outline:none;border-style:solid;border-color:var(--s1);background:#fff}
+.auto{display:block;color:var(--changed);font-size:13px;font-weight:700;margin-bottom:3px}
+.bar{height:9px;background:var(--grid);border-radius:99px;overflow:hidden;min-width:80px;display:flex}
+.bar i{display:block;height:100%}
+.bar i.c{background:var(--cut)} .bar i.s{background:var(--sew)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--ink2);margin:10px 2px 0}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--ring);
+  vertical-align:-1px;margin-right:5px}
+.lines{display:grid;gap:7px}
+.lrow{display:grid;grid-template-columns:64px 1fr 54px;align-items:center;gap:10px;font-size:13px;font-weight:700}
+.lrow .lb{height:17px;border-radius:4px;background:var(--s1);min-width:2px}
+.muted{color:var(--muted)} .small{font-size:12px}
+.wrap{max-width:230px;white-space:normal}
+.shortcell{max-width:230px;white-space:normal;overflow:hidden}
+input[type=checkbox]{accent-color:var(--s1);width:16px;height:16px;cursor:pointer}
+.rowcancel{border:1px solid var(--ring);background:var(--surface-1);color:var(--critical);
+  cursor:pointer;font:inherit;font-size:12px;font-weight:700;padding:3px 9px;border-radius:6px}
+.rowcancel:hover{background:#fbeaea}
+.rowcancel.on{background:var(--critical);color:#fff;border-color:var(--critical)}
+.rowdel{border:1px solid var(--critical);background:var(--critical);color:#fff;cursor:pointer;
+  font:inherit;font-size:12.5px;font-weight:700;line-height:1.2;padding:5px 10px;border-radius:6px;white-space:nowrap}
+.rowdel:hover{filter:brightness(1.1)}
+.cellin{width:100%;border:1px solid transparent;border-radius:4px;background:transparent;
+  font:inherit;font-size:14px;font-weight:600;padding:3px 5px;color:inherit}
+.cellin:hover{border-color:var(--grid)}
+.cellin:focus{outline:none;border-color:var(--s1);background:#fff}
+.cellin.num{text-align:right;width:64px}
+td.editing.num{width:1%}
+.topbar{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2)}
+.topbar select{font:inherit;font-size:13px;font-weight:700;padding:5px 9px;border-radius:7px;
+  border:1px solid var(--ring);background:var(--surface-1);color:var(--ink);cursor:pointer}
+.roleSALES .sales-only{display:inline-flex !important}
+.sales-only{display:none !important}
+.admin-only{display:none !important}
+.roleDEV .admin-only{display:inline-flex !important}
+.search{font:inherit;font-size:14px;font-weight:600;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--axis);background:var(--surface-1);min-width:330px;color:var(--ink)}
+.search:focus{outline:none;border-color:var(--s1)}
+.photo{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--ring);cursor:zoom-in;background:var(--plane)}
+.nophoto{width:56px;height:56px;border-radius:6px;border:1px dashed var(--axis);display:flex;
+  align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;
+  justify-content:center;z-index:99;cursor:zoom-out}
+#lightbox img{max-width:88vw;max-height:88vh;border-radius:8px}
+.uplog{background:#eaf7ea;border:1px solid #cfe9cf;border-radius:9px;padding:10px 14px;
+  font-size:13.5px;font-weight:600;color:#0a5f0a;margin-bottom:12px}
+#pw-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;
+  justify-content:center;z-index:200}
+.pwbox{background:var(--surface-1);border-radius:14px;padding:24px 26px;min-width:340px;
+  box-shadow:0 18px 50px rgba(0,0,0,.25)}
+.pwbox h3{margin:0 0 6px;font-size:17px;font-weight:800}
+.pwbox p{margin:0 0 14px;font-size:13.5px;color:var(--ink2);font-weight:600}
+.pwbox input{width:100%;font:inherit;font-size:15px;padding:9px 12px;border-radius:8px;
+  border:1px solid var(--axis);margin-bottom:8px}
+.pwbox .err{color:var(--critical);font-size:13px;font-weight:700;min-height:18px;margin-bottom:8px}
+.pwrow{display:flex;gap:8px;justify-content:flex-end}
+
+/* 동기화 상태 */
+.upstrip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.upstrip:empty{display:none}
+.upchip.new{border-color:#d03b3b;background:#fdf1f0}
+.upchip .reddot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#d03b3b;margin-left:6px;vertical-align:1px;animation:updot 1.4s ease-in-out infinite}
+.upchip .ackmark{color:#1c7a34;font-weight:800;margin-left:5px}
+@keyframes updot{0%,100%{opacity:1}50%{opacity:.25}}
+.sbst{font-size:12px;padding:3px 10px;border-radius:20px;background:var(--plane);color:var(--ink2)}
+.sbst.ok{background:#e3f4e6;color:#1c7a34}.sbst.busy{background:#fff3d6;color:#8a6100}
+.sbst.err{background:#fde3e3;color:#b3261e}
+/* 모바일 */
+@media (max-width: 900px){
+  body{padding:10px}
+  header .hrow h1{font-size:18px}
+  nav{flex-wrap:wrap;gap:0}
+  nav button{padding:8px 10px;font-size:13px}
+  nav .topbar{width:100%;justify-content:flex-end;padding:6px 0}
+  .tiles{grid-template-columns:1fr 1fr;gap:8px}
+  .tile .v{font-size:20px}
+  #dev-body > div{grid-template-columns:1fr !important}
+  #p-pending-grid{grid-template-columns:1fr !important}
+  .toolbar{flex-wrap:wrap}
+  .tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{font-size:12px}
+}
+
+</style>
+</head>
+<body class="roleSALES">
+<div id="lightbox"><img alt=""></div>
+<div id="pw-modal"><div class="pwbox">
+  <h3 id="pw-title">개발실 모드</h3>
+  <p id="pw-msg">개발실 모드 비밀번호를 입력하세요.</p>
+  <input type="password" id="pw-input" autocomplete="off">
+  <div class="err" id="pw-err"></div>
+  <div class="pwrow">
+    <button class="btn ghost" id="pw-cancel">취소</button>
+    <button class="btn" id="pw-ok">확인</button>
+  </div>
+</div></div>
+<header>
+  <div class="hrow">
+    <h1 id="h-title">JSV 샘플 현황 대시보드</h1>
+    <span class="sub" id="stamp"></span>
+    <span id="sb-status" class="sbst"></span>
+  </div>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-p="sales" id="tab-sales">샘플 현황 차트 (영업)</button>
+    <button role="tab" aria-selected="false" data-p="dev" id="tab-dev">개발실 샘플 현황</button>
+    <button role="tab" aria-selected="false" data-p="cost" id="tab-cost">원가 현황</button>
+    <button role="tab" aria-selected="false" data-p="score" id="tab-score">바이어별 작업 분포도</button>
+    <div class="topbar">
+      <span id="lbl-lang">언어</span>
+      <select id="lang-select">
+        <option value="ko">한국어</option><option value="en">English</option><option value="vi">Tiếng Việt</option>
+      </select>
+      <span id="lbl-mode">모드</span>
+      <select id="role-select">
+        <option value="SALES" selected></option>
+        <option value="DEV"></option>
+      </select>
+    </div>
+  </nav>
+</header>
+<main>
+<section class="panel on" id="p-sales">
+  <div class="tiles" id="sales-tiles"></div>
+  <div class="toolbar">
+    <div class="chips" id="brand-chips" style="flex:1"></div>
+    <button class="btn ghost" id="btn-only-pending"></button>
+    <button class="btn ghost" id="btn-only-cancel"></button>
+    <button class="btn ghost" id="btn-show-done"></button>
+    <span style="width:10px"></span>
+    <button class="btn sales-only" id="btn-upload"></button>
+    <button class="btn ghost" id="btn-xlsx-one"></button>
+    <button class="btn ghost" id="btn-xlsx-all"></button>
+    <input type="file" id="file-input" accept=".xlsx" multiple style="display:none">
+  </div>
+  <div id="upload-log" class="uplog" style="display:none"></div>
+  <div class="card">
+    <div class="cardhead">
+      <h2 id="sales-title">Sample Plan</h2>
+      <button class="btn ghost sm sales-only" id="btn-add-row"></button>
+    </div>
+    <div class="tw"><table id="t-sales"></table></div>
+  </div>
+  <div class="legend" id="sales-legend"></div>
+</section>
+
+<section class="panel" id="p-dev">
+  <div class="upstrip" id="up-strip"></div>
+  <div class="tiles" id="dev-tiles"></div>
+  <div class="toolbar">
+    <div class="chips" id="src-chips"></div>
+    <span class="spacer"></span>
+    <input class="search" id="dev-search" type="search">
+    <button class="btn admin-only" id="btn-dev-upload"></button>
+    <input type="file" id="dev-file" accept=".xlsx,.xls" multiple style="display:none">
+  </div>
+  <div id="dev-log" class="uplog" style="display:none"></div>
+  <div id="dev-body"></div>
+</section>
+
+<section class="panel" id="p-cost">
+  <div class="tiles" id="cost-tiles"></div>
+  <div class="toolbar">
+    <span id="cost-lbl" style="font-weight:700"></span>
+    <select id="cost-brand" class="topbar" style="font:inherit;font-size:14px;font-weight:700;padding:7px 12px;border-radius:8px;border:1px solid var(--axis);background:var(--surface-1)"></select>
+    <div class="chips" id="cost-chips"></div>
+    <span class="spacer"></span>
+    <input class="search" id="cost-search" type="search">
+    <button class="btn admin-only" id="btn-cost-upload"></button>
+    <input type="file" id="cost-file" accept=".xlsx" multiple style="display:none">
+  </div>
+  <div id="cost-log" class="uplog" style="display:none"></div>
+  <div class="card">
+    <h2 id="cost-title">COSTING PENDING</h2>
+    <div class="tw"><table id="t-cost"></table></div>
+  </div>
+</section>
+<section class="panel" id="p-score">
+  <div class="tiles" id="score-tiles"></div>
+  <div class="toolbar">
+    <div class="chips" id="score-years"></div>
+    <span style="width:14px"></span>
+    <div class="chips" id="score-views"></div>
+    <span class="spacer"></span>
+    <input class="search" id="score-search" type="search">
+    <button class="btn admin-only" id="btn-score-upload"></button>
+    <input type="file" id="score-file" accept=".xlsx" style="display:none">
+  </div>
+  <div id="score-log" class="uplog" style="display:none"></div>
+  <div id="score-body"></div>
+</section>
+</main>
+<script id="app-code" type="text/plain">
+/* ---------- 3개 언어 ---------- */
+const I18N = {
+  ko: {
+    title: 'JSV 샘플 현황 대시보드', proto: '프로토타입',
+    tab_sales: '샘플 현황 차트 (영업)', tab_dev: '개발실 샘플 현황', tab_cost: '원가 현황',
+    mode: '모드', mode_sales: '영업 (업로드 · 수정 · 취소)', mode_dev: '개발실 확인 (취소 건 최종 삭제)',
+    pw_title: '개발실 모드', pw_msg: '개발실 모드 비밀번호를 입력하세요.', pw_ok: '확인', pw_cancel: '취소',
+    pw_wrong: '비밀번호가 맞지 않습니다.',
+    t_total_req: '전체 요청 건', t_pending_qty: '미접수 수량', t_total_qty: '전체 수량 (전 브랜드)',
+    t_cancel_wait: '취소 — 삭제 대기', t_brands: '개 브랜드', t_pending_note: '건 · 주황색 표시 대상',
+    t_cancel_note0: '대기 중인 취소 건 없음', t_cancel_note: '개발실 확인 후 최종 삭제',
+    b_pending_only: '미접수만 보기', b_all: '전체 보기', b_cancel_only: '취소 건만 보기',
+    b_done: '완료 건 보기', b_done_hide: '완료 건 숨기기', b_upload: '엑셀 업로드',
+    b_xls_one: '엑셀 (이 브랜드)', b_xls_all: '엑셀 (전체 브랜드)', b_addrow: '+ 행 추가',
+    c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
+    c_ws: '샘플 작지 전달일', c_mtrl: '자재스케줄', c_status: '현황', c_remark: 'Remarks',
+    c_recv: '접수', c_done: '완료', c_cancel: '취소', c_del: '최종 삭제', c_cancelled: '취소됨',
+    lg_recv: '접수 완료', lg_pending: '미접수', lg_cancel: '취소', lg_changed: '변경된 값 (빨간 글씨)',
+    d_count: '진행 중 건수', d_qty: '총 수량', d_short: '자재 이슈', d_soon: '출고 임박 (7일)',
+    d_line_load: '라인별 총 배정 수량', d_short_note: 'SHORTAGE 미해결', d_soon_note: 'DELI 7일 이내',
+    s_all: '전체', s_market: '마켓', s_sample: '샘플', s_pending: '미접수',
+    f_line_all: '전체 라인', f_short_only: '자재 이슈만 보기',
+    b_dev_upload: '개발실 파일 업로드 (SAMPLE RECAP · 샘플 펜딩)',
+    search_ph: 'BRAND · STYLE 번호 · 스타일명 검색',
+    e_photo: '사진/스케치', e_line: 'LINE', e_type: '구분', e_brand: 'BRAND', e_ws: 'W.S / 요청',
+    e_stype: 'Sample Type', e_season: 'SEASON', e_group: 'GROUP', e_style: 'JS STYLE NO.',
+    e_color: 'COLOR', e_qty: 'Q.TY', e_short: '자재 SHORTAGE', e_deli: 'DELI',
+    e_prog: '진행', e_pat: 'PATTERN/담당',
+    p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: '구분', p_style: 'STYLE',
+    p_qty: '총수량', p_bal: '잔량', p_line: 'LINE', p_exp: '접수 예정일', p_deli: 'DEL', p_note: '비고',
+    up_strip: '영업 차트 업로드', up_click: '클릭하여 확인 처리', up_ack: '확인됨', up_new: '미확인 업로드',
+    p_total: '미접수 합계', p_by_brand: '브랜드별 미접수', p_rows: '미접수 건수', p_brands: '브랜드 수',
+    cost_brand: '브랜드', cost_all: '전체 브랜드', cost_open: '미완료', cost_late: '지연',
+    cost_done: '완료', cost_total: '전체 건수',
+    cw_date: 'WS 접수일', cw_buyer: 'BUYER', cw_group: 'GROUP', cw_style: 'STYLE #',
+    cw_pattern: 'PATTERN #', cw_purpose: '용도', cw_req: '요청일', cw_due: '완료예정일',
+    cw_done: '실제 완료일', cw_owner: '담당자', cw_state: '상태', cw_remark: 'REMARK',
+    cut: '재단/기리메', sew: '조립',
+    tab_score: '바이어별 작업 분포도', sc_tot: '총합 점수', sc_tot_pat: '패턴 총합점수', sc_tot_line: '라인 총합점수', sc_all: '전체', sc_pat: '패턴', sc_line: '라인', sc_rows: '작업 건수', sc_makers: '패턴사', sc_lines_n: '라인 수', sc_avg_pat: '패턴 평균점수', sc_avg_line: '라인 평균점수', sc_brand_dist: '브랜드 분포 (%)', sc_total: '합계', sc_search_ph: '패턴사 이름 · 라인 번호 · 브랜드 검색', sc_upload: 'SCORE 파일 업로드', sc_avg: '평균점수', incl: '포함',
+    brand_hint: '브랜드 옆 숫자 — 앞: 전체 요청 건수 · 뒤(주황): 미접수 건수', st_filter: '단계', st_cut: '재단/기리메', st_sew: '조립', st_inprog: '진행중', st_fin: '완료', st_wait: '대기', b_cost_upload: '원가 파일 업로드 (COSTING PENDING)', up_hint_dev: 'SAMPLE RECAP · 마켓 차트 · 샘플 펜딩(미접수) 파일을 여기에 올립니다',
+  },
+  en: {
+    title: 'JSV Sample Status Dashboard', proto: 'Prototype',
+    tab_sales: 'Sample Plan (Sales)', tab_dev: 'Sample Room Status', tab_cost: 'Costing Status',
+    mode: 'Mode', mode_sales: 'Sales (upload · edit · cancel)', mode_dev: 'Sample Room (final delete)',
+    pw_title: 'Sample Room Mode', pw_msg: 'Enter the sample room password.', pw_ok: 'OK', pw_cancel: 'Cancel',
+    pw_wrong: 'Incorrect password.',
+    t_total_req: 'Total requests', t_pending_qty: 'Not received (qty)', t_total_qty: 'Total qty (all brands)',
+    t_cancel_wait: 'Cancelled — pending delete', t_brands: ' brands', t_pending_note: ' rows · shown in orange',
+    t_cancel_note0: 'No cancelled rows', t_cancel_note: 'Delete after sample room check',
+    b_pending_only: 'Not received only', b_all: 'Show all', b_cancel_only: 'Cancelled only',
+    b_done: 'Show finished', b_done_hide: 'Hide finished', b_upload: 'Upload Excel',
+    b_xls_one: 'Excel (this brand)', b_xls_all: 'Excel (all brands)', b_addrow: '+ Add row',
+    c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
+    c_ws: 'W/S pass date', c_mtrl: 'Material sched.', c_status: 'Status', c_remark: 'Remarks',
+    c_recv: 'Received', c_done: 'Done', c_cancel: 'Cancel', c_del: 'Delete', c_cancelled: 'Cancelled',
+    lg_recv: 'Received', lg_pending: 'Not received', lg_cancel: 'Cancelled', lg_changed: 'Changed (red)',
+    d_count: 'In progress', d_qty: 'Total qty', d_short: 'Material issues', d_soon: 'Shipping soon (7d)',
+    d_line_load: 'Qty allocated per line', d_short_note: 'Shortage unresolved', d_soon_note: 'DELI within 7 days',
+    s_all: 'All', s_market: 'Market', s_sample: 'Sample', s_pending: 'Not received',
+    f_line_all: 'All lines', f_short_only: 'Material issues only',
+    b_dev_upload: 'Upload files (SAMPLE RECAP · Pending)',
+    search_ph: 'Search brand · style no. · style name',
+    e_photo: 'Photo/Sketch', e_line: 'LINE', e_type: 'Type', e_brand: 'BRAND', e_ws: 'W.S / Req',
+    e_stype: 'Sample Type', e_season: 'SEASON', e_group: 'GROUP', e_style: 'JS STYLE NO.',
+    e_color: 'COLOR', e_qty: 'Q.TY', e_short: 'SHORTAGE', e_deli: 'DELI',
+    e_prog: 'Progress', e_pat: 'PATTERN/Owner',
+    p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: 'Type', p_style: 'STYLE',
+    p_qty: 'Total qty', p_bal: 'Balance', p_line: 'LINE', p_exp: 'Expected date', p_deli: 'DEL', p_note: 'Note',
+    up_strip: 'Sales chart uploads', up_click: 'Click to acknowledge', up_ack: 'Confirmed', up_new: 'New upload',
+    p_total: 'Not received total', p_by_brand: 'By brand', p_rows: 'Not received rows', p_brands: 'Brands',
+    cost_brand: 'Brand', cost_all: 'All brands', cost_open: 'Open', cost_late: 'Late',
+    cost_done: 'Done', cost_total: 'Total',
+    cw_date: 'WS received', cw_buyer: 'BUYER', cw_group: 'GROUP', cw_style: 'STYLE #',
+    cw_pattern: 'PATTERN #', cw_purpose: 'Purpose', cw_req: 'Requested', cw_due: 'Due',
+    cw_done: 'Completed', cw_owner: 'Owner', cw_state: 'Status', cw_remark: 'REMARK',
+    cut: 'Cutting/Painting', sew: 'Sewing',
+    tab_score: 'Work Distribution by Buyer', sc_tot: 'Total score', sc_tot_pat: 'Pattern total score', sc_tot_line: 'Line total score', sc_all: 'All', sc_pat: 'Pattern', sc_line: 'Line', sc_rows: 'Jobs', sc_makers: 'Pattern makers', sc_lines_n: 'Lines', sc_avg_pat: 'Avg pattern score', sc_avg_line: 'Avg line score', sc_brand_dist: 'Brand distribution (%)', sc_total: 'Total', sc_search_ph: 'Search pattern maker / line no. / brand', sc_upload: 'Upload SCORE file', sc_avg: 'Avg score', incl: 'incl.',
+    brand_hint: 'Numbers next to brand — first: total requests · orange: not received', st_filter: 'Stage', st_cut: 'Cutting/Painting', st_sew: 'Sewing', st_inprog: 'In progress', st_fin: 'Finished', st_wait: 'Waiting', b_cost_upload: 'Upload costing file (COSTING PENDING)', up_hint_dev: 'Upload SAMPLE RECAP · Market chart · Sample pending files here',
+  },
+  vi: {
+    title: 'Bảng theo dõi mẫu JSV', proto: 'Bản thử',
+    tab_sales: 'Kế hoạch mẫu (Kinh doanh)', tab_dev: 'Tình trạng phòng mẫu', tab_cost: 'Tình trạng costing',
+    mode: 'Chế độ', mode_sales: 'Kinh doanh (tải lên · sửa · huỷ)', mode_dev: 'Phòng mẫu (xoá cuối cùng)',
+    pw_title: 'Chế độ phòng mẫu', pw_msg: 'Nhập mật khẩu phòng mẫu.', pw_ok: 'OK', pw_cancel: 'Huỷ',
+    pw_wrong: 'Mật khẩu không đúng.',
+    t_total_req: 'Tổng yêu cầu', t_pending_qty: 'Chưa tiếp nhận (SL)', t_total_qty: 'Tổng SL (tất cả)',
+    t_cancel_wait: 'Đã huỷ — chờ xoá', t_brands: ' thương hiệu', t_pending_note: ' dòng · màu cam',
+    t_cancel_note0: 'Không có dòng huỷ', t_cancel_note: 'Xoá sau khi phòng mẫu kiểm tra',
+    b_pending_only: 'Chỉ chưa tiếp nhận', b_all: 'Xem tất cả', b_cancel_only: 'Chỉ dòng huỷ',
+    b_done: 'Xem đã xong', b_done_hide: 'Ẩn đã xong', b_upload: 'Tải file Excel',
+    b_xls_one: 'Excel (thương hiệu này)', b_xls_all: 'Excel (tất cả)', b_addrow: '+ Thêm dòng',
+    c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
+    c_ws: 'Ngày giao W/S', c_mtrl: 'Lịch nguyên liệu', c_status: 'Tình trạng', c_remark: 'Ghi chú',
+    c_recv: 'Tiếp nhận', c_done: 'Xong', c_cancel: 'Huỷ', c_del: 'Xoá', c_cancelled: 'Đã huỷ',
+    lg_recv: 'Đã tiếp nhận', lg_pending: 'Chưa tiếp nhận', lg_cancel: 'Đã huỷ', lg_changed: 'Đã thay đổi (đỏ)',
+    d_count: 'Đang thực hiện', d_qty: 'Tổng SL', d_short: 'Thiếu nguyên phụ liệu', d_soon: 'Sắp xuất (7 ngày)',
+    d_line_load: 'SL phân bổ theo chuyền', d_short_note: 'Chưa giải quyết', d_soon_note: 'DELI trong 7 ngày',
+    s_all: 'Tất cả', s_market: 'Market', s_sample: 'Mẫu', s_pending: 'Chưa tiếp nhận',
+    f_line_all: 'Tất cả chuyền', f_short_only: 'Chỉ thiếu NPL',
+    b_dev_upload: 'Tải file (SAMPLE RECAP · Pending)',
+    search_ph: 'Tìm brand · mã style · tên style',
+    e_photo: 'Ảnh/Sketch', e_line: 'CHUYỀN', e_type: 'Loại', e_brand: 'BRAND', e_ws: 'W.S / Y/C',
+    e_stype: 'Sample Type', e_season: 'SEASON', e_group: 'GROUP', e_style: 'JS STYLE NO.',
+    e_color: 'MÀU', e_qty: 'SL', e_short: 'THIẾU NPL', e_deli: 'DELI',
+    e_prog: 'Tiến độ', e_pat: 'PATTERN/Phụ trách',
+    p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: 'Phân loại', p_style: 'STYLE',
+    p_qty: 'Tổng SL', p_bal: 'Còn lại', p_line: 'CHUYỀN', p_exp: 'Ngày dự kiến nhận', p_deli: 'DEL', p_note: 'Ghi chú',
+    up_strip: 'Tải lên biểu đồ KD', up_click: 'Bấm để xác nhận', up_ack: 'Đã xác nhận', up_new: 'Chưa xác nhận',
+    p_total: 'Tổng chưa tiếp nhận', p_by_brand: 'Theo thương hiệu', p_rows: 'Số dòng chưa tiếp nhận', p_brands: 'Số thương hiệu',
+    cost_brand: 'Thương hiệu', cost_all: 'Tất cả', cost_open: 'Chưa xong', cost_late: 'Trễ',
+    cost_done: 'Đã xong', cost_total: 'Tổng số',
+    cw_date: 'Ngày nhận WS', cw_buyer: 'BUYER', cw_group: 'GROUP', cw_style: 'STYLE #',
+    cw_pattern: 'PATTERN #', cw_purpose: 'Mục đích', cw_req: 'Ngày Y/C', cw_due: 'Dự kiến xong',
+    cw_done: 'Ngày xong', cw_owner: 'Phụ trách', cw_state: 'Trạng thái', cw_remark: 'GHI CHÚ',
+    cut: 'Cắt/Kirime', sew: 'May',
+    tab_score: 'Phân bổ công việc theo buyer', sc_tot: 'Tổng điểm', sc_tot_pat: 'Tổng điểm rập', sc_tot_line: 'Tổng điểm chuyền', sc_all: 'Tất cả', sc_pat: 'Thợ rập', sc_line: 'Chuyền', sc_rows: 'Số việc', sc_makers: 'Thợ rập', sc_lines_n: 'Số chuyền', sc_avg_pat: 'Điểm rập TB', sc_avg_line: 'Điểm chuyền TB', sc_brand_dist: 'Phân bổ theo brand (%)', sc_total: 'Tổng', sc_search_ph: 'Tìm thợ rập / chuyền / brand', sc_upload: 'Tải file SCORE', sc_avg: 'Điểm TB', incl: 'gồm',
+    brand_hint: 'Số bên cạnh thương hiệu — đầu: tổng yêu cầu · cam: chưa tiếp nhận', st_filter: 'Công đoạn', st_cut: 'Cắt/Kirime', st_sew: 'May', st_inprog: 'Đang tiến hành', st_fin: 'Xong', st_wait: 'Chờ', b_cost_upload: 'Tải file costing (COSTING PENDING)', up_hint_dev: 'Tải SAMPLE RECAP · Market chart · file pending tại đây',
+  },
+};
+let LANG = 'ko';
+const T = k => (I18N[LANG][k] !== undefined ? I18N[LANG][k] : (I18N.ko[k] || k));
+
+/* ---- 최소 XLSX 라이터 (외부 라이브러리 없음 · 오프라인 동작) ---- */
+const XW = (() => {
+  const CRC = (() => { const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t; })();
+  const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder();
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const col = n => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26; } return s; };
+
+  function zip(files) {
+    const parts = [], central = []; let off = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name), data = f.data, c = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
+      lh.setUint32(14, c, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(new Uint8Array(lh.buffer), name, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint32(16, c, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, off, true);
+      central.push(new Uint8Array(ch.buffer), name);
+      off += 30 + name.length + data.length;
+    }
+    const cs = central.reduce((s, a) => s + a.length, 0);
+    const eo = new DataView(new ArrayBuffer(22));
+    eo.setUint32(0, 0x06054b50, true); eo.setUint16(8, files.length, true); eo.setUint16(10, files.length, true);
+    eo.setUint32(12, cs, true); eo.setUint32(16, off, true);
+    const all = [...parts, ...central, new Uint8Array(eo.buffer)];
+    const total = all.reduce((s, a) => s + a.length, 0), out = new Uint8Array(total);
+    let p = 0; for (const a of all) { out.set(a, p); p += a.length; }
+    return out;
+  }
+
+  /* style ids: 0 기본 / 1 헤더 / 2 본문 / 3 본문+노랑 / 4 빨강글씨 / 5 빨강글씨+노랑 / 6 제목 */
+  const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="5">
+<font><sz val="11"/><name val="Calibri"/></font>
+<font><b/><sz val="11"/><name val="Calibri"/></font>
+<font><sz val="11"/><color rgb="FFFF0000"/><b/><name val="Calibri"/></font>
+<font><b/><sz val="13"/><name val="Calibri"/></font>
+<font><sz val="11"/><color rgb="FFFF0000"/><name val="Calibri"/></font>
+</fonts>
+<fills count="6">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFEFEFEF"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFFBDEA3"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFF9D5D5"/><bgColor indexed="64"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFD7DBFD"/><bgColor indexed="64"/></patternFill></fill>
+</fills>
+<borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="11">
+<xf xfId="0" fontId="0" fillId="0" borderId="0"/>
+<xf xfId="0" fontId="1" fillId="2" borderId="1" applyFill="1" applyBorder="1" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="0" fillId="0" borderId="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="0" fillId="3" borderId="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="2" fillId="0" borderId="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="2" fillId="3" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="3" fillId="0" borderId="0" applyFont="1"/>
+<xf xfId="0" fontId="0" fillId="4" borderId="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="2" fillId="4" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="0" fillId="5" borderId="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf xfId="0" fontId="2" fillId="5" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+
+  /* sheets: [{name, cols:[w], rows:[[{v,s,t}|null,...]]}] */
+  function build(sheets) {
+    const f = [];
+    const add = (n, s) => f.push({ name: n, data: enc.encode(s) });
+    add('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}
+</Types>`);
+    add('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+    add('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${sheets.map((s, i) => `<sheet name="${esc(s.name).slice(0,31)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`);
+    add('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${sheets.map((_, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}
+<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+    add('xl/styles.xml', STYLES);
+    sheets.forEach((s, i) => {
+      const cols = s.cols ? `<cols>${s.cols.map((w, j) => `<col min="${j+1}" max="${j+1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+      const rows = s.rows.map((r, ri) => {
+        const cells = r.map((c, ci) => {
+          if (c == null || c.v === '' || c.v == null) return c && c.s ? `<c r="${col(ci+1)}${ri+1}" s="${c.s}"/>` : '';
+          const ref = `${col(ci+1)}${ri+1}`;
+          if (typeof c.v === 'number') return `<c r="${ref}" s="${c.s||0}"><v>${c.v}</v></c>`;
+          return `<c r="${ref}" s="${c.s||0}" t="inlineStr"><is><t xml:space="preserve">${esc(c.v)}</t></is></c>`;
+        }).join('');
+        const ht = (ri >= (s.headRows || 0) && s.rowHeight) ? ` ht="${s.rowHeight}" customHeight="1"` : '';
+        return `<row r="${ri+1}"${ht}>${cells}</row>`;
+      }).join('');
+      add(`xl/worksheets/sheet${i+1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${rows}</sheetData></worksheet>`);
+    });
+    return zip(f);
+  }
+  return { build };
+})();
+
+/* ---- 최소 XLSX 리더 (브라우저 내장 DecompressionStream 사용) ---- */
+const XR = (() => {
+  const dec = new TextDecoder();
+
+  async function inflate(u8, method) {
+    if (method === 0) return u8;
+    if (typeof DecompressionStream === 'undefined') throw new Error('NO_DS');
+    const ds = new DecompressionStream('deflate-raw');
+    const buf = await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function unzip(ab) {
+    const u8 = new Uint8Array(ab), dv = new DataView(ab);
+    let eo = -1;
+    for (let i = u8.length - 22; i >= 0 && i > u8.length - 66000; i--)
+      if (dv.getUint32(i, true) === 0x06054b50) { eo = i; break; }
+    if (eo < 0) throw new Error('ZIP 형식이 아닙니다');
+    let n = dv.getUint16(eo + 10, true), off = dv.getUint32(eo + 16, true);
+    const files = {};
+    for (let i = 0; i < n; i++) {
+      const method = dv.getUint16(off + 10, true);
+      const csize = dv.getUint32(off + 20, true);
+      const nlen = dv.getUint16(off + 28, true), elen = dv.getUint16(off + 30, true);
+      const clen = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+      const name = dec.decode(u8.subarray(off + 46, off + 46 + nlen));
+      const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lnl + lel;
+      files[name] = { data: u8.subarray(start, start + csize), method };
+      off += 46 + nlen + elen + clen;
+    }
+    const out = {};
+    for (const k of Object.keys(files))
+      out[k] = dec.decode(await inflate(files[k].data, files[k].method));
+    return out;
+  }
+
+  const unesc = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d))
+    .replace(/&amp;/g, '&');
+  const txt = frag => { let o = ''; frag.replace(/<t[^>]*>([\s\S]*?)<\/t>/g, (_, v) => { o += unesc(v); return ''; }); return o; };
+  const colIdx = ref => { let n = 0; for (const c of ref.replace(/\d+/g, '')) n = n * 26 + (c.charCodeAt(0) - 64); return n; };
+
+  /* 엑셀 날짜 시리얼 → yyyy-mm-dd */
+  const serialDate = v => {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return isNaN(d) ? String(v) : d.toISOString().slice(0, 10);
+  };
+
+  let RAW = null;
+  async function readSheets(ab) {
+    RAW = ab;
+    const f = await unzip(ab);
+    const shared = [];
+    if (f['xl/sharedStrings.xml'])
+      f['xl/sharedStrings.xml'].replace(/<si>([\s\S]*?)<\/si>/g, (_, s) => { shared.push(txt(s)); return ''; });
+    /* 시트 이름 + 파일 매핑 */
+    const rels = {};
+    (f['xl/_rels/workbook.xml.rels'] || '').replace(/<Relationship([^>]*)\/>/g, (_, a) => {
+      const id = (a.match(/Id="([^"]+)"/) || [])[1], t = (a.match(/Target="([^"]+)"/) || [])[1];
+      if (id && t) rels[id] = t.replace(/^\/?xl\//, '').replace(/^\//, '');
+      return '';
+    });
+    const sheets = [];
+    (f['xl/workbook.xml'] || '').replace(/<sheet([^>]*)\/>/g, (_, a) => {
+      if (/state="(hidden|veryHidden)"/.test(a)) return '';   /* 숨김 시트 제외 */
+      const nm = unesc((a.match(/name="([^"]*)"/) || [])[1] || '');
+      const rid = (a.match(/r:id="([^"]+)"/) || [])[1];
+      let path = rels[rid] || '';
+      if (path && !path.startsWith('worksheets/')) path = path.replace(/^.*worksheets\//, 'worksheets/');
+      sheets.push({ name: nm, path: 'xl/' + path });
+      return '';
+    });
+    /* 스타일: 날짜 서식 여부 */
+    const numFmt = {};
+    (f['xl/styles.xml'] || '').replace(/<numFmt([^>]*)\/>/g, (_, a) => {
+      const id = (a.match(/numFmtId="(\d+)"/) || [])[1], c = (a.match(/formatCode="([^"]*)"/) || [])[1] || '';
+      if (id) numFmt[id] = c; return '';
+    });
+    const fillColors = [];
+    (f['xl/styles.xml'] || '').replace(/<fills[^>]*>([\s\S]*?)<\/fills>/, (_, b) => {
+      b.replace(/<fill>([\s\S]*?)<\/fill>/g, (__, one) => {
+        if (!/patternType="solid"/.test(one)) { fillColors.push(''); return ''; }
+        const m = one.match(/<fgColor[^>]*rgb="([0-9A-Fa-f]{6,8})"/);
+        fillColors.push(m ? m[1].slice(-6).toUpperCase() : 'THEME');
+        return '';
+      });
+      return '';
+    });
+    const xfFill = [];
+    const xfIds = [];
+    (f['xl/styles.xml'] || '').replace(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/, (_, b) => {
+      b.replace(/<xf([^>]*)[/>]/g, (__, a) => {
+        xfIds.push((a.match(/numFmtId="(\d+)"/) || [])[1] || '0');
+        xfFill.push(fillColors[+((a.match(/fillId="(\d+)"/) || [])[1] || 0)] || '');
+        return '';
+      });
+      return '';
+    });
+    const isDate = s => {
+      const id = xfIds[+s || 0] || '0';
+      if (['14','15','16','17','22','164','165','166','167'].includes(id)) return true;
+      return /[ymd]/.test(numFmt[id] || '') && !/[#0]/.test((numFmt[id] || '').replace(/\[[^\]]*\]/g, ''));
+    };
+
+    /* --- 시트별 이미지 (drawing anchor row → dataURL) --- */
+    let media = null;
+    async function imagesFor(sheetPath, xml) {
+      const res = {};
+      const dr = (xml.match(/<drawing[^>]*r:id="([^"]+)"/) || [])[1];
+      if (!dr) return res;
+      const relPath = sheetPath.replace(/([^/]+)$/, '_rels/$1.rels');
+      const rels = f[relPath]; if (!rels) return res;
+      let target = '';
+      rels.replace(/<Relationship([^>]*)\/>/g, (_, a) => {
+        if ((a.match(/Id="([^"]+)"/) || [])[1] === dr) target = (a.match(/Target="([^"]+)"/) || [])[1] || '';
+        return '';
+      });
+      if (!target) return res;
+      const dpath = ('xl/' + target.replace(/^\.\.\//, '')).replace(/\/\.\//g, '/');
+      const dxml = f[dpath]; if (!dxml) return res;
+      const drels = f[dpath.replace(/([^/]+)$/, '_rels/$1.rels')] || '';
+      const rmap = {};
+      drels.replace(/<Relationship([^>]*)\/>/g, (_, a) => {
+        const id = (a.match(/Id="([^"]+)"/) || [])[1];
+        const t = (a.match(/Target="([^"]+)"/) || [])[1] || '';
+        if (id) rmap[id] = 'xl/' + t.replace(/^\.\.\//, '');
+        return '';
+      });
+      if (!media) media = await unzipBinary(RAW);
+      const MT = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', emf: '', wmf: '' };
+      dxml.replace(/<xdr:(?:twoCellAnchor|oneCellAnchor)[\s\S]*?<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g, blk => {
+        const row = +((blk.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/) || [])[1] || -1);
+        const rid = (blk.match(/r:embed="([^"]+)"/) || [])[1];
+        if (row < 0 || !rid || !rmap[rid]) return '';
+        const path = rmap[rid], ext = (path.split('.').pop() || '').toLowerCase();
+        if (!MT[ext] || !media[path]) return '';
+        let s = ''; const u = media[path], CH = 0x8000;
+        for (let i = 0; i < u.length; i += CH) s += String.fromCharCode.apply(null, u.subarray(i, i + CH));
+        res[row + 1] = 'data:' + MT[ext] + ';base64,' + btoa(s);
+        return '';
+      });
+      return res;
+    }
+
+    const out = [];
+    for (const sh of sheets) {
+      const xml = f[sh.path]; if (!xml) continue;
+      const rows = [];
+      xml.replace(/<row([^>]*)r="(\d+)"([^>]*)>([\s\S]*?)<\/row>/g, (_, a1, rn, a2, body) => {
+        if (/hidden="(1|true)"/.test(a1 + a2)) return '';     /* 숨김 행 제외 */
+        const cells = [];
+        body.replace(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (__, attr, inner) => {
+          const ref = (attr.match(/r="([A-Z]+\d+)"/) || [])[1];
+          const t = (attr.match(/t="([^"]+)"/) || [])[1] || 'n';
+          const s = (attr.match(/s="(\d+)"/) || [])[1] || '0';
+          let v = '';
+          if (inner) {
+            if (t === 's') { const m = inner.match(/<v>(\d+)<\/v>/); v = m ? shared[+m[1]] : ''; }
+            else if (t === 'inlineStr') v = txt(inner);
+            else if (t === 'str') { const m = inner.match(/<v>([\s\S]*?)<\/v>/); v = m ? unesc(m[1]) : ''; }
+            else {
+              const m = inner.match(/<v>([\s\S]*?)<\/v>/);
+              v = m ? unesc(m[1]) : '';
+              if (v !== '' && !isNaN(+v) && +v > 20000 && +v < 80000 && isDate(s)) v = serialDate(+v);
+            }
+          }
+          if (ref) {
+            cells[colIdx(ref) - 1] = String(v).trim();
+            const fc = xfFill[+s || 0] || '';
+            if (fc) (cells.fills = cells.fills || {})[colIdx(ref) - 1] = fc;
+          }
+          return '';
+        });
+        rows[+rn - 1] = cells;
+        return '';
+      });
+      out.push({ name: sh.name, rows: rows.map(r => r || []), images: await imagesFor(sh.path, xml) });
+    }
+    return out;
+  }
+  async function unzipBinary(ab) {
+    const u8 = new Uint8Array(ab), dv = new DataView(ab);
+    let eo = -1;
+    for (let i = u8.length - 22; i >= 0 && i > u8.length - 66000; i--)
+      if (dv.getUint32(i, true) === 0x06054b50) { eo = i; break; }
+    if (eo < 0) throw new Error('ZIP 형식이 아닙니다');
+    let n = dv.getUint16(eo + 10, true), off = dv.getUint32(eo + 16, true);
+    const out = {};
+    for (let i = 0; i < n; i++) {
+      const method = dv.getUint16(off + 10, true);
+      const csize = dv.getUint32(off + 20, true);
+      const nlen = dv.getUint16(off + 28, true), elen = dv.getUint16(off + 30, true);
+      const clen = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+      const raw = u8.subarray(off + 46, off + 46 + nlen);
+      let name;
+      try { name = new TextDecoder('utf-8', { fatal: true }).decode(raw); }
+      catch (e) { name = new TextDecoder('euc-kr').decode(raw); }
+      const lnl = dv.getUint16(lho + 26, true), lel = dv.getUint16(lho + 28, true);
+      const start = lho + 30 + lnl + lel;
+      if (!name.endsWith('/'))
+        out[name] = await inflate(u8.subarray(start, start + csize), method);
+      off += 46 + nlen + elen + clen;
+    }
+    return out;
+  }
+  return { readSheets, unzipBinary };
+})();
+
+const D = window.__DATA__;
+const R = D.requests, E = D.execs, PEND = D.pending, COST = D.costing;
+const PENDMETA = D.pending_meta || { total_balance: 0, yellow_balance: 0 };
+const MKCOV = D.mk_cover || {};   /* 브랜드별 마켓 차트 파일이 다루는 스타일 키(완료분 포함) */
+const UPMETA = D.up_meta || {};   /* 브랜드별 영업 차트 업로드 알림 { brand: {at, ack} } */
+/* Supabase 동기화 훅 — 온라인 빌드에서 구현이 주입됨 */
+let DIRTY_IMPL = null;
+const dirty = (...names) => { if (DIRTY_IMPL) DIRTY_IMPL(...names); };
+const SCORE = D.score || {};
+/* 브랜드 약어 */
+const ABBR = { AMAZON: 'AM', BEIS: 'BE', CH: 'CH', GAP: 'GA', GUESS: 'GF', STAUD: 'ST',
+  TOUS: 'TU', STANLEY: 'SN', MEEM: 'ME', QUINCE: 'QN', UGG: 'UG', 'MARC JACOB': 'MJ', KEEK: 'KE', GS: 'GF' };
+const AB = b => ABBR[String(b || '').toUpperCase()] || b;
+
+const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const el = id => document.getElementById(id);
+const tile = (k, v, n, cls) =>
+  `<div class="tile ${cls || ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n || ''}</div></div>`;
+const TODAY = (d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10))(new Date());
+const SOON_END = (d => new Date(d.getTime() + 7 * 86400000 - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10))(new Date());
+
+/* ---------- 모드 (개발실은 비밀번호) ---------- */
+const DEV_PW = '0303';
+let ROLE = 'SALES';
+const can = {
+  edit:   () => ROLE === 'SALES',
+  cancel: () => ROLE === 'SALES',
+  del:    r => ROLE === 'DEV' && r.cancelled,
+};
+function setRole(v) {
+  ROLE = v;
+  el('role-select').value = v;
+  document.body.classList.remove('roleSALES', 'roleDEV');
+  document.body.classList.add('role' + v);
+  renderAll();
+}
+el('role-select').onchange = e => {
+  if (e.target.value === 'DEV') {
+    e.target.value = ROLE;
+    el('pw-input').value = ''; el('pw-err').textContent = '';
+    el('pw-modal').style.display = 'flex';
+    setTimeout(() => el('pw-input').focus(), 50);
+  } else setRole('SALES');
+};
+function tryPw() {
+  if (el('pw-input').value === DEV_PW) { el('pw-modal').style.display = 'none'; setRole('DEV'); }
+  else { el('pw-err').textContent = T('pw_wrong'); el('pw-input').select(); }
+}
+el('pw-ok').onclick = tryPw;
+el('pw-input').onkeydown = e => { if (e.key === 'Enter') tryPw(); };
+el('pw-cancel').onclick = () => { el('pw-modal').style.display = 'none'; el('role-select').value = ROLE; };
+
+/* ---------- 언어 ---------- */
+el('lang-select').onchange = e => { LANG = e.target.value; renderAll(); };
+
+/* ---------- 사진 ---------- */
+const lb = el('lightbox');
+lb.onclick = () => lb.style.display = 'none';
+const zoom = src => { lb.querySelector('img').src = src; lb.style.display = 'flex'; };
+const photoCell = e => e.photo
+  ? `<img class="photo" src="${e.photo}" data-zoom="${e.photo}" alt="">`
+  : `<div class="nophoto">—</div>`;
+
+/* ---------- 탭 ---------- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.setAttribute('aria-selected', x === b));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.p));
+});
+
+const changeText = r => Object.entries(r.changes)
+  .map(([f, c]) => `${({xf:'XF date',hb:'HB',slg:'SLG',ws_pass:T('c_ws'),stage:'Stage'})[f] || f}: ${c.from} → ${c.to}`)
+  .join(' / ');
+
+/* ================= 샘플 현황 차트 (영업) ================= */
+const BRANDS = [...new Set(R.map(r => r.brand_full))].sort((x, y) => x.localeCompare(y));
+let curBrand = BRANDS[0], onlyPending = false, showDone = false, onlyCancelled = false, seq = 0;
+const ofBrand = b => R.filter(r => r.brand_full === b);
+const visible = r => showDone || !r.done;
+
+function drawChips() {
+  el('brand-chips').innerHTML = BRANDS.map(b => {
+    const list = ofBrand(b).filter(visible);
+    const p = list.filter(r => !r.received && !r.cancelled).length;
+    const rc = list.filter(r => r.received).length;
+    return `<button class="chip" data-b="${esc(b)}" aria-pressed="${b === curBrand}">${esc(AB(b))}
+      ${rc ? `<span class="cnt recv">${rc}</span>` : ''}${p ? `<span class="cnt pend">${p}</span>` : ''}</button>`;
+  }).join('');
+}
+el('brand-chips').onclick = e => {
+  const b = e.target.closest('[data-b]'); if (!b) return;
+  curBrand = b.dataset.b; drawChips(); drawSales();
+};
+el('btn-only-pending').onclick = () => { onlyPending = !onlyPending; drawSales(); };
+el('btn-only-cancel').onclick = () => { onlyCancelled = !onlyCancelled; drawSales(); };
+el('btn-show-done').onclick = () => { showDone = !showDone; drawChips(); drawSales(); };
+el('btn-add-row').onclick = () => {
+  const r = { id: 'N' + (++seq), brand: curBrand, brand_full: curBrand, season: '', stage: '',
+    xf: '', hb: 0, slg: 0, ws_pass: '', mtrl_sched: '', status: '', remarks: '',
+    received: false, done: false, cancelled: false, changes: {}, comment: '', isNew: true };
+  R.unshift(r); drawChips(); drawSales(); dirty('requests');
+  const tr = el('t-sales').querySelector(`tr[data-id="${r.id}"]`);
+  if (tr) tr.querySelector('.cellin').focus();
+};
+
+function salesRows() {
+  let rows = ofBrand(curBrand).filter(visible);
+  if (onlyPending) rows = rows.filter(r => !r.received);
+  if (onlyCancelled) rows = rows.filter(r => r.cancelled);
+  return rows;
+}
+
+function drawSales() {
+  if (!BRANDS.includes(curBrand)) curBrand = BRANDS[0];
+  el('btn-only-pending').textContent = onlyPending ? T('b_all') : T('b_pending_only');
+  el('btn-only-cancel').textContent = onlyCancelled ? T('b_all') : T('b_cancel_only');
+  el('btn-show-done').textContent = showDone ? T('b_done_hide') : T('b_done');
+  el('btn-upload').textContent = T('b_upload');
+  el('btn-xlsx-one').textContent = T('b_xls_one');
+  el('btn-xlsx-all').textContent = T('b_xls_all');
+  el('btn-add-row').textContent = T('b_addrow');
+
+  const rows = salesRows();
+  const all = ofBrand(curBrand).filter(visible);
+  const hb = all.reduce((s, r) => s + r.hb, 0), slg = all.reduce((s, r) => s + r.slg, 0);
+  const allRows = R.filter(visible);
+  const thb = allRows.reduce((s, r) => s + r.hb, 0), tslg = allRows.reduce((s, r) => s + r.slg, 0);
+  const p = allRows.filter(r => !r.received);
+  const phb = p.reduce((s, r) => s + r.hb, 0), pslg = p.reduce((s, r) => s + r.slg, 0);
+  const cx = allRows.filter(r => r.cancelled);
+
+  el('stamp').textContent = TODAY;
+  el('sales-title').textContent = AB(curBrand) + ' — Sample Plan (' + rows.length + ')';
+
+  el('sales-tiles').innerHTML =
+    tile(T('t_total_req'), allRows.length, BRANDS.length + T('t_brands'), 'blue') +
+    `<div class="tile amber"><div class="k">${T('t_pending_qty')}</div>
+       <div class="v">${(phb + pslg).toLocaleString()}</div>
+       <div class="subn">HB ${phb.toLocaleString()} · SLG ${pslg.toLocaleString()}</div>
+       <div class="n">${p.length}${T('t_pending_note')}</div></div>` +
+    `<div class="tile teal"><div class="k">${T('t_total_qty')}</div>
+       <div class="v">${(thb + tslg).toLocaleString()}</div>
+       <div class="subn">HB ${thb.toLocaleString()} · SLG ${tslg.toLocaleString()}</div>
+       <div class="n">${esc(AB(curBrand))} : ${(hb + slg).toLocaleString()}</div></div>` +
+    tile(T('t_cancel_wait'), cx.length, cx.length ? T('t_cancel_note') : T('t_cancel_note0'),
+         cx.length ? 'hot' : 'red');
+
+  const COLS = [T('c_brand'), T('c_season'), T('c_stage'), T('c_xf'), 'HB', 'SLG',
+                T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark'),
+                T('c_recv'), T('c_done'), T('c_cancel'), ''];
+  const F = (r, f, cls) => {
+    const red = r.changes[f] ? ' chg' : '';
+    const t = r.changes[f] ? ` title="${esc(r.changes[f].from)}"` : '';
+    return `<td class="editing${cls === 'num' ? ' num' : ''}${red}"${t}>
+      <input class="cellin ${cls || ''}" data-f="${f}" value="${esc(r[f] === 0 ? '' : r[f])}"
+      ${can.edit() ? '' : 'readonly'}></td>`;
+  };
+
+  /* 하단 TOTAL은 화면에 보이는(필터 적용된) 행 기준 — 미접수만 보기 시 미접수 합계 */
+  const shb = rows.reduce((s, r) => s + r.hb, 0), sslg = rows.reduce((s, r) => s + r.slg, 0);
+  el('t-sales').innerHTML =
+    '<thead><tr>' + COLS.map(c => `<th class="${['HB','SLG'].includes(c) ? 'num' : ''}">${c}</th>`).join('') +
+    '</tr></thead><tbody>' +
+    rows.map(r => {
+      const auto = changeText(r);
+      const cls = r.cancelled ? 'cancelled' : (r.received ? 'recv' : 'pending');
+      return `<tr class="${cls}" data-id="${r.id}">
+        <td>${esc(r.brand)}</td>
+        ${F(r, 'season')}${F(r, 'stage')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
+        ${F(r, 'ws_pass')}${F(r, 'mtrl_sched')}${F(r, 'status')}
+        <td class="wrap">${auto ? `<span class="auto">▲ ${esc(auto)}</span>` : ''}
+          <input class="cmt" data-f="comment" placeholder="${esc(r.remarks) || ''}" value="${esc(r.comment)}"></td>
+        <td style="text-align:center"><input type="checkbox" data-k="received" ${r.received ? 'checked' : ''}></td>
+        <td style="text-align:center"><input type="checkbox" data-k="done" ${r.done ? 'checked' : ''}></td>
+        <td style="text-align:center">${can.cancel()
+          ? `<button class="rowcancel ${r.cancelled ? 'on' : ''}">${r.cancelled ? T('c_cancelled') : 'CANCEL'}</button>`
+          : (r.cancelled ? `<span class="st risk">${T('c_cancelled')}</span>` : '<span class="muted small">—</span>')}</td>
+        <td>${can.del(r) ? `<button class="rowdel">${T('c_del')}</button>` : ''}</td>
+      </tr>`;
+    }).join('') +
+    `<tr class="totrow"><td colspan="4" style="text-align:right">${onlyPending ? T('t_pending_qty') + ' ' : ''}TOTAL</td>
+      <td class="num">${shb.toLocaleString()}</td><td class="num">${sslg.toLocaleString()}</td>
+      <td colspan="${COLS.length - 6}">${(shb + sslg).toLocaleString()} pcs</td></tr></tbody>`;
+
+  el('t-sales').querySelectorAll('tbody tr[data-id]').forEach(tr => {
+    const r = R.find(x => x.id === tr.dataset.id);
+    tr.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      if (!can.edit()) { cb.disabled = true; return; }
+      cb.onchange = ev => {
+        r[cb.dataset.k] = ev.target.checked;
+        drawChips(); drawSales(); dirty('requests');
+      };
+    });
+    tr.querySelectorAll('.cellin, .cmt').forEach(inp => inp.onchange = ev => {
+      const f = inp.dataset.f, v = ev.target.value;
+      r[f] = (f === 'hb' || f === 'slg') ? (parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) : v;
+      drawSales(); dirty('requests');
+    });
+    const cbt = tr.querySelector('.rowcancel');
+    if (cbt) cbt.onclick = () => {
+      r.cancelled = !r.cancelled;
+      if (r.cancelled) {
+        r.received = false;
+        if (!(r.comment || '').includes('[취소')) r.comment = ('[취소 ' + TODAY + '] ' + (r.comment || '')).trim();
+      } else r.comment = (r.comment || '').replace(/\[취소 \d{4}-\d{2}-\d{2}\]\s*/, '');
+      drawChips(); drawSales(); dirty('requests');
+    };
+    const dbt = tr.querySelector('.rowdel');
+    if (dbt) dbt.onclick = () => {
+      if (!can.del(r)) return;
+      if (!confirm(`${r.brand_full} / ${r.season} / ${r.stage}`)) return;
+      const i = R.findIndex(x => x.id === r.id);
+      if (i >= 0) R.splice(i, 1);
+      drawChips(); drawSales(); dirty('requests');
+    };
+  });
+
+  el('sales-legend').innerHTML =
+    `<span><i class="sw" style="background:var(--recv-bg);border-color:var(--recv-line)"></i>${T('lg_recv')}</span>
+     <span><i class="sw" style="background:var(--pending-bg);border-color:var(--pending-line)"></i>${T('lg_pending')}</span>
+     <span><i class="sw" style="background:#f9d5d5;border-color:#e8b4b4"></i>${T('lg_cancel')}</span>
+     <span><i class="sw" style="background:var(--changed)"></i>${T('lg_changed')}</span>`;
+}
+
+/* ---------- 엑셀 다운로드 ---------- */
+const XW_W = [3, 9, 10, 30, 14, 8, 8, 24, 18, 22, 40];
+function sheetFor(brand) {
+  const list = ofBrand(brand).filter(visible);
+  const rows = [];
+  rows.push([null, { v: brand + '_Sample Plan', s: 6 }]);
+  rows.push([null, null, null, null, null, null, null, null, null, null, { v: TODAY }]);
+  rows.push([null, null, null, null, { v: "Q'ty", s: 1 }, { v: '', s: 1 },
+             { v: 'Sample ws pass date', s: 1 }, { v: 'MATL Schedule', s: 1 }, { v: 'Status', s: 1 }, { v: '', s: 1 }]);
+  rows.push(['', 'Brand', 'Season', 'Stage', 'XF date', 'HB', 'SLG', T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark')]
+            .map((c, i) => i === 0 ? null : { v: c, s: 1 }));
+  let hb = 0, slg = 0;
+  for (const r of list) {
+    hb += r.hb; slg += r.slg;
+    const base = r.cancelled ? 7 : (r.received ? 9 : 3);
+    const red  = r.cancelled ? 8 : (r.received ? 10 : 5);
+    const sty = f => (r.changes[f] ? red : base);
+    const auto = changeText(r);
+    const remark = [r.cancelled ? '[CANCEL]' : '', auto ? '[CHG] ' + auto : '',
+                    r.comment || r.remarks || ''].filter(Boolean).join(' / ');
+    rows.push([null, { v: r.brand, s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
+      { v: r.xf, s: sty('xf') }, { v: r.hb || '', s: sty('hb') }, { v: r.slg || '', s: sty('slg') },
+      { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: base },
+      { v: r.status || '', s: base }, { v: remark, s: auto ? red : base }]);
+  }
+  rows.push([null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
+             { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }]);
+  return { name: brand, cols: XW_W, rows, rowHeight: 29.25, headRows: 2 };
+}
+function saveXlsx(sheets, name) {
+  const url = URL.createObjectURL(new Blob([XW.build(sheets)],
+    { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name + '_' + TODAY + '.xlsx'; a.click(); URL.revokeObjectURL(url);
+}
+el('btn-xlsx-all').onclick = () => saveXlsx(BRANDS.map(sheetFor), 'Sample Plan_ALL');
+el('btn-xlsx-one').onclick = () => saveXlsx([sheetFor(curBrand)], AB(curBrand) + '_Sample Plan');
+
+/* ================= 개발실 샘플 현황 ================= */
+E.forEach(e => { if (!e.source) e.source = 'SAMPLE'; });
+const LINES = () => [...new Set(E.map(e => e.line).filter(l => l && l !== 'L?'))]
+  .sort((a, b) => (+a.slice(1)) - (+b.slice(1)));
+let curLine = 'ALL', onlyShort = false, curSrc = 'ALL', devQ = '', curStage = 'ALL';
+
+/* 완료 판정·단계 분류: CUTTING/SEWING만 표시 */
+const isDate = v => /^\d{4}-\d{2}-\d{2}/.test(String(v || ''));
+const activeDev = e => {
+  if (String(e.finished || '').toUpperCase() === 'DONE') return false;
+  if (isDate(e.finished) && String(e.finished).slice(0, 10) <= TODAY) return false;
+  if (e.balance_n === 0) return false;               /* 잔량 0 = 완료 */
+  return true;
+};
+const stageOf = e => (isDate(e.sewing) && String(e.sewing).slice(0, 10) <= TODAY) ? 'SEW' : 'CUT';
+el('dev-search').oninput = e => { devQ = e.target.value.trim().toLowerCase(); drawDev(); };
+
+/* 브랜드 이름/약어를 그대로 검색하면 해당 브랜드만 필터 (스타일명 부분일치 혼입 방지) */
+const BR_ALIAS = { GS:'GUESS', GF:'GUESS', GUESS:'GUESS', TU:'TOUS', TOUS:'TOUS', ST:'STAUD', STAUD:'STAUD',
+  BE:'BEIS', BEIS:'BEIS', SN:'STANLEY', STANLEY:'STANLEY', CH:'CH', COACH:'CH', AM:'AMAZON', AMAZON:'AMAZON',
+  ME:'MEEM', MEEM:'MEEM', QN:'QUINCE', QU:'QUINCE', QUINCE:'QUINCE', UG:'UGG', UGG:'UGG', GAP:'GAP',
+  KE:'KEEK', KEEK:'KEEK', MJ:'MARC JACOB' };
+const brandQ = q => BR_ALIAS[String(q || '').trim().toUpperCase()] || null;
+const hit = (e, q) => {
+  if (!q) return true;
+  const b = brandQ(q);
+  if (b) return e.brand === b;
+  return [e.brand, e.style, e.pattern, e.mk_style, e.group, e.color, e.season, e.sample_type]
+    .some(v => String(v || '').toLowerCase().includes(q));
+};
+
+function drawDev() {
+  if (!['ALL', 'CUT', 'SEW'].includes(curStage)) curStage = 'ALL';
+  el('dev-search').placeholder = T('search_ph');
+  el('btn-dev-upload').textContent = T('b_dev_upload');
+  el('btn-dev-upload').title = T('up_hint_dev');
+
+  /* 영업 차트 업로드 알림: 브랜드별 최근 업로드 시각 + 미확인(빨간 점) 표시.
+     개발실 모드에서 클릭하면 확인 처리되어 전 인원에게 반영 */
+  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at).sort();
+  const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
+  el('up-strip').innerHTML = !ub.length ? '' :
+    `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
+    ub.map(b => {
+      const m = UPMETA[b];
+      const isNew = !m.ack;
+      const tip = m.ack ? `${T('up_ack')} ${lt(m.ack)}` : (ROLE === 'DEV' ? T('up_click') : T('up_new'));
+      return `<button class="chip upchip${isNew ? ' new' : ''}" data-ub="${esc(b)}" title="${esc(tip)}">
+        ${esc(AB(b))}<span class="small muted"> ${lt(m.at)}</span>${isNew ? '<i class="reddot"></i>' : '<span class="ackmark">✓</span>'}</button>`;
+    }).join('');
+  el('up-strip').onclick = ev => {
+    const btn = ev.target.closest('[data-ub]'); if (!btn) return;
+    const m = UPMETA[btn.dataset.ub];
+    if (ROLE !== 'DEV' || !m || m.ack) return;
+    m.ack = new Date().toISOString();
+    dirty('up_meta'); drawDev();
+  };
+
+  const SRC = { ALL: T('s_all'), MARKET: T('s_market'), SAMPLE: T('s_sample'), PENDING: T('s_pending') };
+  const qsum = list => list.reduce((s, e) => s + (e.qty_n || 0), 0);
+  /* 완료 건 제외: FINISHED 날짜 경과·DONE·잔량 0 행은 대시보드에서 숨김 (CUT/SEW만 표시) */
+  const ACT = E.filter(activeDev);
+  /* 칩 수량 — 전체·미접수: 샘플진행현황 잔량 / 마켓: 파일 잔량(Balance) 합 / 샘플: RECAP Q'ty 합 */
+  const qty = k => k === 'PENDING' ? (PENDMETA.yellow_balance || PEND.reduce((s, p2) => s + p2.balance_n, 0))
+    : k === 'ALL' ? (PENDMETA.total_balance || qsum(ACT) + PEND.reduce((s, p2) => s + p2.balance_n, 0))
+    : qsum(ACT.filter(e => e.source === k));
+  el('src-chips').innerHTML = ['ALL', 'MARKET', 'SAMPLE', 'PENDING'].map(k =>
+    `<button class="chip" data-s="${k}" aria-pressed="${k === curSrc}">${SRC[k]}
+      <span class="small muted"> ${qty(k).toLocaleString()}</span></button>`).join('');
+
+  if (curSrc === 'PENDING') { drawPending(); return; }
+
+  const scope = ACT.filter(e => (curSrc === 'ALL' || e.source === curSrc) && hit(e, devQ));
+  let rows = scope.slice();
+  if (curLine !== 'ALL') rows = rows.filter(e => e.line === curLine);
+  if (curStage !== 'ALL') rows = rows.filter(e => stageOf(e) === curStage);
+  if (onlyShort) rows = rows.filter(e => e.shortage);
+
+  const pendBal = PEND.reduce((s, p2) => s + p2.balance_n, 0);
+  const totalAll = curSrc === 'ALL'
+    ? (PENDMETA.total_balance || scope.reduce((s, e) => s + e.qty_n, 0) + pendBal)
+    : scope.reduce((s, e) => s + e.qty_n, 0);
+  el('dev-tiles').innerHTML =
+    tile(T('d_qty'), totalAll.toLocaleString() + ' pcs',
+         (curSrc === 'ALL' ? T('s_pending') + ' ' + pendBal.toLocaleString() + ' ' + T('incl') : SRC[curSrc]), 'teal') +
+    tile(T('d_short'), scope.filter(e => e.shortage).length.toLocaleString(), T('d_short_note'), 'red') +
+    tile(T('d_soon'), scope.filter(e => e.deli_soon).length.toLocaleString(), T('d_soon_note'), 'amber');
+
+  const byLine = LINES().map(l => ({ l, q: scope.filter(e => e.line === l).reduce((s, e) => s + e.qty_n, 0) }));
+  const mx = Math.max(...byLine.map(x => x.q), 1);
+
+  el('dev-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start">
+      <div class="card" style="padding-bottom:12px">
+        <h2>${T('d_line_load')}</h2>
+        <div class="lines" style="padding:12px 14px">${byLine.map(x =>
+          `<div class="lrow"><span class="muted">LINE ${x.l.slice(1)}</span>
+            <span class="lb" style="width:${Math.max(2, x.q / mx * 100)}%"></span>
+            <span class="num">${x.q}</span></div>`).join('') || '<span class="muted small">—</span>'}</div>
+      </div>
+      <div>
+        <div class="toolbar">
+          <div class="chips" id="stage-chips"></div>
+          <span class="spacer"></span>
+        </div>
+        <div class="toolbar">
+          <div class="chips" id="line-chips"></div>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="btn-shortage">${onlyShort ? T('b_all') : T('f_short_only')}</button>
+        </div>
+        <div class="card">
+          <h2>${SRC[curSrc]} — ${curLine === 'ALL' ? T('f_line_all') : 'LINE ' + curLine.slice(1)} (${rows.length})</h2>
+          <div class="tw"><table id="t-dev"></table></div>
+        </div>
+      </div>
+    </div>`;
+
+  /* 전체 보기에서는 '전체' 대신 '진행중'으로 표기 (전체 928 = 진행중 + 미접수) */
+  const SLB = { ALL: curSrc === 'ALL' ? T('st_inprog') : T('s_all'), CUT: T('st_cut'), SEW: T('st_sew') };
+  el('stage-chips').innerHTML = `<span style="align-self:center;font-weight:700;color:var(--ink2);margin-right:4px">${T('st_filter')}</span>` +
+    ['ALL', 'CUT', 'SEW'].map(k =>
+      `<button class="chip" data-st="${k}" aria-pressed="${k === curStage}">${SLB[k]}
+        <span class="small muted"> ${(k === 'ALL' ? scope : scope.filter(e => stageOf(e) === k))
+          .reduce((s, e) => s + (e.qty_n || 0), 0).toLocaleString()}</span></button>`).join('') +
+    (curSrc === 'ALL' ? `<button class="chip" data-gopend="1">${T('s_pending')}
+        <span class="small muted"> ${(PENDMETA.yellow_balance || PEND.reduce((s, p2) => s + p2.balance_n, 0)).toLocaleString()}</span></button>` : '');
+  el('stage-chips').onclick = ev => {
+    const g = ev.target.closest('[data-gopend]');
+    if (g) { curSrc = 'PENDING'; drawDev(); return; }
+    const b = ev.target.closest('[data-st]'); if (!b) return;
+    curStage = b.dataset.st; drawDev();
+  };
+  el('line-chips').innerHTML = ['ALL', ...LINES()].map(l =>
+    `<button class="chip" data-l="${l}" aria-pressed="${l === curLine}">${l === 'ALL' ? T('f_line_all') : 'LINE ' + l.slice(1)}</button>`).join('');
+  el('line-chips').onclick = ev => {
+    const b = ev.target.closest('[data-l]'); if (!b) return;
+    curLine = b.dataset.l; drawDev();
+  };
+  el('btn-shortage').onclick = () => { onlyShort = !onlyShort; drawDev(); };
+
+  const isMK = curSrc === 'MARKET';   /* 마켓 칩: 바이어 Style / Pattern # 분리 표시 */
+  const COLS = [T('e_photo'), T('e_line'), T('e_type'), T('e_brand'), T('e_ws'), T('e_stype'),
+                T('e_season'), T('e_group'),
+                ...(isMK ? ['STYLE', 'PATTERN #'] : [T('e_style')]),
+                T('e_color'), T('e_qty'),
+                T('e_short'), T('e_deli'), T('e_prog'), T('e_pat')];
+  el('t-dev').innerHTML = '<thead><tr>' + COLS.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+    rows.map(e => {
+      const isSew = stageOf(e) === 'SEW';
+      const stCls = e.shortage ? 'risk' : (isSew ? 'sew' : 'cut');
+      const label = isSew ? T('st_sew') : T('st_cut');
+      return `<tr>
+        <td>${photoCell(e)}</td>
+        <td>${esc(e.line)}</td>
+        <td><span class="st ${e.source === 'MARKET' ? 'prog' : 'wait'}">${e.source === 'MARKET' ? T('s_market') : T('s_sample')}</span></td>
+        <td>${esc(AB(e.brand))}</td><td>${esc(e.req_date)}</td><td>${esc(e.sample_type)}</td>
+        <td>${esc(e.season)}</td><td class="wrap">${esc(e.group)}</td>
+        ${isMK ? `<td>${esc(e.mk_style || '')}</td><td>${esc(e.src_name ? (e.pattern || e.style) : e.style)}</td>`
+               : `<td>${esc(e.style)}</td>`}
+        <td>${esc(e.color)}</td><td class="num">${esc(e.qty)}</td>
+        <td class="shortcell">${e.shortage
+          ? `<span class="st risk" title="${esc(e.shortage)}">▲ ${esc(e.shortage.replace(/\s+/g, ' ').slice(0, 42))}</span>`
+          : '<span class="muted small">OK</span>'}</td>
+        <td>${esc(e.deli)}</td>
+        <td><span class="st ${stCls}">${label}</span>
+          <div class="bar" style="margin-top:5px">
+            <i class="c" style="width:${isSew ? 50 : 25}%"></i>
+            <i class="s" style="width:${isSew ? 25 : 0}%"></i></div></td>
+        <td>${esc(e.pattern_maker || e.pattern)}</td></tr>`;
+    }).join('') + '</tbody>';
+  el('t-dev').querySelectorAll('.photo').forEach(img => img.onclick = () => zoom(img.dataset.zoom));
+}
+
+/* ---------- 미접수 탭 (샘플 펜딩 노란색) ---------- */
+const BELL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="#d03b3b" style="vertical-align:-2px">' +
+  '<path d="M12 22a2.3 2.3 0 0 0 2.3-2.3H9.7A2.3 2.3 0 0 0 12 22zm7-5.3v-1l-1.6-1.6v-4.4c0-3-1.6-5.4-4.4-6v-.6a1.4 1.4 0 1 0-2.8 0v.6c-2.8.6-4.4 3-4.4 6v4.4L4.2 15.7v1z"/></svg>';
+/* 접수 예정일에서 마지막 날짜 추출 ('8/14->8/18' → 8/18) */
+const expDue = p => {
+  const s = String(p.exp || '');
+  let m = s.match(/\d{4}-\d{2}-\d{2}/g);
+  if (m) return m[m.length - 1];
+  m = s.match(/\d{1,2}\s*\/\s*\d{1,2}/g);
+  if (m) {
+    const [mm, dd] = m[m.length - 1].split('/').map(x => +x);
+    return TODAY.slice(0, 4) + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+  }
+  return '';
+};
+function drawPending() {
+  const bq = brandQ(devQ);
+  const rows = PEND.filter(p => !devQ || (bq ? p.brand === bq :
+    [p.brand, p.style, p.group, p.gubun, p.pattern].some(v => String(v || '').toLowerCase().includes(devQ))));
+  const byBrand = {};
+  rows.forEach(p => { byBrand[p.brand] = (byBrand[p.brand] || 0) + p.balance_n; });
+  const brands = Object.keys(byBrand).sort();
+  const total = rows.reduce((s, p) => s + p.balance_n, 0);
+
+  el('dev-tiles').innerHTML =
+    tile(T('p_rows'), rows.length, T('s_pending'), 'amber') +
+    tile(T('p_total'), total.toLocaleString() + ' pcs', T('p_by_brand'), 'red') +
+    tile(T('p_brands'), brands.length, brands.map(AB).join(', '), 'blue') +
+    tile(T('d_soon'), rows.filter(p => p.deli && p.deli <= SOON_END).length, T('d_soon_note'), 'teal');
+
+  const COLS = [T('p_buyer'), T('p_div'), T('p_group'), T('p_gubun'), T('p_style'), T('p_exp'), '🔔',
+                T('p_qty'), T('p_bal'), T('p_deli'), T('p_note')];
+  el('dev-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:320px 1fr;gap:12px;align-items:start">
+      <div class="card">
+        <h2>${T('p_by_brand')}</h2>
+        <div class="lines" style="padding:12px 14px">${brands.map(b => {
+          const mx = Math.max(...Object.values(byBrand), 1);
+          return `<div class="lrow"><span class="muted">${esc(AB(b))}</span>
+            <span class="lb" style="width:${Math.max(2, byBrand[b] / mx * 100)}%;background:var(--pending-line)"></span>
+            <span class="num">${byBrand[b]}</span></div>`;
+        }).join('')}
+        <div class="lrow" style="border-top:2px solid var(--axis);padding-top:8px;margin-top:6px">
+          <span>${T('p_total')}</span><span></span><span class="num">${total.toLocaleString()}</span></div></div>
+      </div>
+      <div class="card">
+        <h2>${T('s_pending')} (${rows.length})</h2>
+        <div class="tw"><table id="t-pend"></table></div>
+      </div>
+    </div>`;
+
+  el('t-pend').innerHTML = '<thead><tr>' + COLS.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+    brands.map(b => {
+      const list = rows.filter(p => p.brand === b);
+      return list.map((p, i) => {
+        const d = expDue(p);
+        const late = d && d < TODAY;
+        return `<tr class="pending">
+        ${i === 0 ? `<td rowspan="${list.length}" style="vertical-align:middle;font-weight:800">${esc(AB(b))}</td>` : ''}
+        <td>${esc(p.division)}</td><td class="wrap">${esc(p.group)}</td><td class="wrap">${esc(p.gubun)}</td>
+        <td>${esc(p.style)}</td>
+        <td${late ? ' style="color:#b3261e;font-weight:700"' : ''}>${esc(p.exp || '')}</td>
+        <td style="text-align:center"${late ? ` title="${esc(T('p_exp'))} ${esc(d)}"` : ''}>${late ? BELL : ''}</td>
+        <td class="num">${p.qty_n || ''}</td><td class="num">${p.balance_n || ''}</td>
+        <td>${esc(p.deli)}</td><td class="wrap">${esc(p.note)}</td></tr>`;
+      }).join('') +
+        `<tr class="totrow"><td colspan="7" style="text-align:right">${esc(AB(b))} ${T('p_total')}</td>
+          <td class="num">${list.reduce((s, p) => s + p.qty_n, 0)}</td>
+          <td class="num">${list.reduce((s, p) => s + p.balance_n, 0)}</td><td colspan="2"></td></tr>`;
+    }).join('') +
+    `<tr class="totrow"><td colspan="7" style="text-align:right">${T('p_total')}</td>
+      <td class="num">${rows.reduce((s, p) => s + p.qty_n, 0)}</td>
+      <td class="num">${total}</td><td colspan="2"></td></tr></tbody>`;
+}
+
+el('src-chips').onclick = e => {
+  const b = e.target.closest('[data-s]'); if (!b) return;
+  curSrc = b.dataset.s; drawDev();
+};
+
+/* ================= 원가 현황 ================= */
+let costBrand = 'ALL', costState = 'ALL', costQ = '';
+el('cost-search').oninput = e => { costQ = e.target.value.trim().toLowerCase(); drawCost(); };
+el('cost-brand').onchange = e => { costBrand = e.target.value; drawCost(); };
+
+function drawCost() {
+  el('cost-lbl').textContent = T('cost_brand');
+  el('cost-search').placeholder = T('search_ph');
+  const brands = [...new Set(COST.map(c => c.brand))].sort();
+  el('btn-cost-upload').textContent = T('b_cost_upload');
+  el('cost-brand').innerHTML = `<option value="ALL">${T('cost_all')}</option>` +
+    brands.map(b => `<option value="${esc(b)}" ${b === costBrand ? 'selected' : ''}>${esc(AB(b))} (${COST.filter(c => c.brand === b).length.toLocaleString()})</option>`).join('');
+
+  const cbq = brandQ(costQ);
+  const scope = COST.filter(c => (costBrand === 'ALL' || c.brand === costBrand) &&
+    (!costQ || (cbq ? c.brand === cbq :
+      [c.brand, c.style, c.pattern, c.group, c.owner].some(v => String(v || '').toLowerCase().includes(costQ)))));
+
+  el('cost-chips').innerHTML = '';
+  el('cost-tiles').innerHTML =
+    tile(T('cost_total'), scope.length.toLocaleString(), costBrand === 'ALL' ? T('cost_all') : AB(costBrand), 'blue');
+
+  const rows = scope.slice(0, 500);
+  const COLS = [T('cw_date'), T('cw_buyer'), T('cw_group'), T('cw_style'), T('cw_pattern'),
+                T('cw_purpose'), T('cw_req'), T('cw_due'), T('cw_owner'), T('cw_remark')];
+  el('cost-title').textContent = `COSTING PENDING (${scope.length.toLocaleString()})`;
+  el('t-cost').innerHTML = '<thead><tr>' + COLS.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+    rows.map(c => `<tr>
+      <td>${esc(c.ws_date)}</td><td>${esc(AB(c.brand))}</td><td class="wrap">${esc(c.group)}</td>
+      <td>${esc(c.style)}</td><td>${esc(c.pattern)}</td><td>${esc(c.purpose)}</td>
+      <td>${esc(c.req_date)}</td><td>${esc(c.due)}</td><td>${esc(c.owner)}</td>
+      <td class="wrap">${esc(c.remark)}</td></tr>`).join('') + '</tbody>';
+}
+el('cost-chips').onclick = e => {
+  const b = e.target.closest('[data-c]'); if (!b) return;
+  costState = b.dataset.c; drawCost();
+};
+
+/* ================= 바이어별 작업 분포도 ================= */
+let scYear = null, scView = 'ALL', scQ = '';
+el('score-search').oninput = e => { scQ = e.target.value.trim().toLowerCase(); drawScore(); };
+
+const fmtTot = a => Math.round(a[1]).toLocaleString();
+
+function brandBars(dist, q) {
+  const items = Object.entries(dist).sort((a, b) => b[1][0] - a[1][0]);
+  const tot = items.reduce((s, [, v]) => s + v[0], 0) || 1;
+  return items
+    .filter(([b]) => !q || AB(b).toLowerCase().includes(q) || b.toLowerCase().includes(q))
+    .map(([b, v]) => {
+      const pct = Math.round(v[0] / tot * 100);
+      return `<div class="lrow" style="grid-template-columns:44px 1fr 52px">
+      <span class="muted">${esc(AB(b))}</span>
+      <span class="lb" style="width:${Math.max(2, pct)}%"></span>
+      <span class="num">${pct}%</span></div>`;
+    }).join('');
+}
+
+function drawScore() {
+  const years = Object.keys(SCORE).sort();
+  if (!years.length) { el('score-body').innerHTML = ''; return; }
+  if (!scYear || !SCORE[scYear]) scYear = years[years.length - 1];
+  el('score-search').placeholder = T('sc_search_ph');
+  el('btn-score-upload').textContent = T('sc_upload');
+
+  el('score-years').innerHTML = years.map(y =>
+    `<button class="chip" data-y="${y}" aria-pressed="${y === scYear}">${y}</button>`).join('');
+  const V = { ALL: T('sc_all'), PAT: T('sc_pat'), LINE: T('sc_line') };
+  el('score-views').innerHTML = ['ALL', 'PAT', 'LINE'].map(k =>
+    `<button class="chip" data-v="${k}" aria-pressed="${k === scView}">${V[k]}</button>`).join('');
+
+  const Y = SCORE[scYear];
+  const makers = Object.entries(Y.pat), lines = Object.entries(Y.line);
+  el('score-tiles').innerHTML =
+    tile(T('sc_rows'), (Y.rows || 0).toLocaleString(), scYear, 'blue') +
+    tile(T('sc_makers'), makers.length, Object.keys(Y.pat).join(' · '), 'teal') +
+    tile(T('sc_lines_n'), lines.length, '', 'amber');
+
+  const q = scQ;
+  const hitName = n => !q || n.toLowerCase().includes(q);
+  const hitDist = d => Object.keys(d).some(b => b.toLowerCase().includes(q) || AB(b).toLowerCase().includes(q));
+
+  const section = (title, entries, isLine) => {
+    const list = entries
+      .filter(([n, d]) => hitName(n) || (q && hitDist(d)))
+      .sort((a, b) => isLine
+        ? (+a[0].slice(1)) - (+b[0].slice(1))
+        : Object.values(b[1]).reduce((s, v) => s + v[0], 0) - Object.values(a[1]).reduce((s, v) => s + v[0], 0));
+    return `<div class="card" style="margin-bottom:12px">
+      <h2>${title}</h2>
+      <div class="tw"><table><thead><tr>
+        <th>${isLine ? T('sc_line') : T('sc_makers')}</th><th class="num">${T('sc_rows')}</th>
+        <th class="num">${T('sc_tot')}</th><th>${T('sc_brand_dist')}</th></tr></thead><tbody>` +
+      list.map(([n, d]) => {
+        const tot = Object.values(d).reduce((s, v) => s + v[0], 0);
+        const sc = Object.values(d).reduce((s, v) => [0, s[1] + v[1], s[2] + v[2]], [0, 0, 0]);
+        return `<tr><td style="font-weight:800">${esc(isLine ? 'LINE ' + n.slice(1) : n)}</td>
+          <td class="num">${tot.toLocaleString()}</td>
+          <td class="num">${fmtTot(sc)}</td>
+          <td style="min-width:340px"><div class="lines" style="gap:4px">${brandBars(d, q && !hitName(n) ? q : '')}</div></td></tr>`;
+      }).join('') + '</tbody></table></div></div>';
+  };
+
+  /* 전체: 브랜드별 분포 */
+  const bAll = {};
+  makers.forEach(([, d]) => Object.entries(d).forEach(([b, v]) => {
+    const a = (bAll[b] = bAll[b] || [0, 0, 0]); a[0] += v[0]; a[1] += v[1]; a[2] += v[2];
+  }));
+  const lAll = {};
+  lines.forEach(([, d]) => Object.entries(d).forEach(([b, v]) => {
+    const a = (lAll[b] = lAll[b] || [0, 0, 0]); a[0] += v[0]; a[1] += v[1]; a[2] += v[2];
+  }));
+  const brandTable = () => {
+    const bs = Object.keys(Object.assign({}, bAll, lAll))
+      .filter(b => !q || b.toLowerCase().includes(q) || AB(b).toLowerCase().includes(q))
+      .sort((a, b) => (bAll[b] ? bAll[b][0] : 0) - (bAll[a] ? bAll[a][0] : 0));
+      return `<div class="card" style="margin-bottom:12px"><h2>${scYear} — ${T('sc_all')}</h2>
+      <div class="tw"><table><thead><tr>
+        <th>BRAND</th><th class="num">${T('sc_rows')}</th>
+        <th class="num">${T('sc_tot_pat')}</th><th class="num">${T('sc_tot_line')}</th><th></th></tr></thead><tbody>` +
+      (() => {
+        const totN = bs.reduce((s, b) => s + (bAll[b] ? bAll[b][0] : 0), 0) || 1;
+        return bs.map(b => {
+          const pct = Math.round((bAll[b] ? bAll[b][0] : 0) / totN * 100);
+          return `<tr><td style="font-weight:800">${esc(AB(b))}</td>
+        <td class="num">${(bAll[b] ? bAll[b][0] : 0).toLocaleString()}</td>
+        <td class="num">${bAll[b] ? fmtTot(bAll[b]) : '—'}</td>
+        <td class="num">${lAll[b] ? fmtTot(lAll[b]) : '—'}</td>
+        <td style="min-width:280px"><div class="lrow" style="grid-template-columns:1fr 52px;gap:8px">
+          <span class="lb" style="width:${Math.max(2, pct)}%;height:12px"></span>
+          <span class="num">${pct}%</span></div></td></tr>`;
+        }).join('');
+      })() +
+      '</tbody></table></div></div>';
+  };
+
+  el('score-body').innerHTML =
+    (scView === 'ALL' ? brandTable() : '') +
+    (scView === 'PAT' || (scView === 'ALL' && q) ? section(T('sc_pat'), makers, false) : '') +
+    (scView === 'LINE' || (scView === 'ALL' && q) ? section(T('sc_line'), lines, true) : '');
+}
+el('score-years').onclick = e => {
+  const b = e.target.closest('[data-y]'); if (!b) return;
+  scYear = b.dataset.y; drawScore();
+};
+el('score-views').onclick = e => {
+  const b = e.target.closest('[data-v]'); if (!b) return;
+  scView = b.dataset.v; drawScore();
+};
+
+/* ---------- 전체 렌더 ---------- */
+function renderAll() {
+  document.documentElement.lang = LANG;
+  el('h-title').textContent = T('title');
+  el('tab-sales').textContent = T('tab_sales');
+  el('tab-dev').textContent = T('tab_dev');
+  el('tab-cost').textContent = T('tab_cost');
+  el('tab-score').textContent = T('tab_score');
+  el('lbl-lang').textContent = LANG === 'ko' ? '언어' : (LANG === 'en' ? 'Language' : 'Ngôn ngữ');
+  el('lbl-mode').textContent = T('mode');
+  el('role-select').options[0].textContent = T('mode_sales');
+  el('role-select').options[1].textContent = T('mode_dev');
+  el('pw-title').textContent = T('pw_title');
+  el('pw-msg').textContent = T('pw_msg');
+  el('pw-ok').textContent = T('pw_ok');
+  el('pw-cancel').textContent = T('pw_cancel');
+  drawChips(); drawSales(); drawDev(); drawCost(); drawScore();
+}
+renderAll();
+
+/* ---------- 엑셀 업로드 → Sample Plan 반영 ---------- */
+const BR_CODE = { GAP:'GAP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UGG', ST:'STAUD', STAUD:'STAUD',
+  AM:'AMAZON', AMAZON:'AMAZON', CH:'CH', ME:'MEEM', MEEM:'MEEM', GF:'GUESS', GS:'GUESS', GUESS:'GUESS',
+  TU:'TOUS', TOUS:'TOUS', SN:'STANLEY', STANLEY:'STANLEY', QN:'QUINCE', QUINCE:'QUINCE' };
+
+const FIELD_OF = h => {
+  const t = (h || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (/^brand/.test(t)) return 'brand';
+  if (/^season/.test(t)) return 'season';
+  if (/^stage/.test(t)) return 'stage';
+  if (/xf/.test(t)) return 'xf';
+  if (/^hb$/.test(t)) return 'hb';
+  if (/^slg$/.test(t)) return 'slg';
+  if (/작지|ws pass/.test(t)) return 'ws_pass';
+  if (/자재|matl|material/.test(t)) return 'mtrl_sched';
+  if (/현황|status/.test(t)) return 'status';
+  if (/remark/.test(t)) return 'remarks';
+  return null;
+};
+
+const keyOf = r => [r.brand_full, (r.season || '').toUpperCase(), (r.stage || '').toUpperCase().trim(),
+                    (r.xf || '').trim()].join('|');
+const num = v => { const m = String(v || '').replace(/,/g, '').match(/\d+/); return m ? +m[0] : 0; };
+
+const YELLOWISH = h => {
+  if (!h || h === 'THEME') return false;
+  const x = h.toUpperCase();
+  if (x === 'FFFFFF') return false;
+  if (['FFEB9C', 'FFF2CC', 'FFE699'].includes(x)) return true;
+  return x.startsWith('FFFF') && parseInt(x.slice(4), 16) < 0xE0;
+};
+function sheetToRecords(rows) {
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 25); i++)
+    if ((rows[i] || []).some(c => /^brand$/i.test((c || '').trim()))) { hi = i; break; }
+  if (hi < 0) return [];
+  const above = rows[hi - 1] || [];
+  const below = rows[hi + 1] || [];
+  const map = {};
+  rows[hi].forEach((c, j) => {
+    const f = FIELD_OF(c) || FIELD_OF(above[j]);
+    if (f && !(f in map)) map[f] = j;
+  });
+  /* HB/SLG가 헤더 아랫줄에 있는 양식(Q'ty 병합 헤더) 지원 */
+  let start = hi + 1;
+  const subFields = below.map(c => FIELD_OF(c));
+  if (subFields.some(f => f === 'hb' || f === 'slg')) {
+    below.forEach((c, j) => { const f = FIELD_OF(c); if (f && !(f in map)) map[f] = j; });
+    start = hi + 2;
+  }
+  if (!('brand' in map) || !('stage' in map)) return [];
+  const out = [];
+  for (let i = start; i < rows.length; i++) {
+    const row = rows[i]; if (!row || !row.length) continue;
+    const g = f => (map[f] != null ? (row[map[f]] || '').trim() : '');
+    if (/^total$/i.test(g('stage')) || row.some(c => /^total$/i.test((c || '').trim()) && !g('brand'))) continue;
+    let brand = g('brand');
+    if (!brand && out.length) brand = out[out.length - 1].brandRaw;
+    if (!brand) continue;
+    const rowYellow = Object.values(row.fills || {}).some(YELLOWISH);
+    const rec = { brandRaw: brand, brand, brand_full: BR_CODE[brand.toUpperCase()] || brand.toUpperCase(),
+      season: g('season'), stage: g('stage'), xf: g('xf'),
+      hb: num(g('hb')), slg: num(g('slg')), ws_pass: g('ws_pass'),
+      mtrl_sched: g('mtrl_sched'), status: g('status'), remarks: g('remarks'),
+      received: !rowYellow };            /* 흰 배경 = 접수 완료 · 노란색 = 미접수 */
+    if (!rec.stage && !rec.xf && !rec.hb && !rec.slg) continue;
+    out.push(rec);
+  }
+  return out;
+}
+
+const CMP = ['season', 'stage', 'xf', 'hb', 'slg', 'ws_pass', 'mtrl_sched', 'status'];
+
+async function handleUpload(fileList) {
+  const box = el('upload-log');
+  box.style.display = 'block';
+  box.innerHTML = '<span class="muted">읽는 중…</span>';
+  let added = 0, updated = 0, changedCells = 0, files = 0, brands = new Set(), note = '', xlsWarn = false;
+  try {
+    for (const file of fileList) {
+      if (/\.xls$/i.test(file.name)) { xlsWarn = true; continue; }
+      const sheets = await XR.readSheets(await file.arrayBuffer());
+      const recs = [];
+      const parsed = sheets.map(s => ({ name: s.name, recs: sheetToRecords(s.rows) })).filter(s => s.recs.length);
+      if (!parsed.length) continue;
+      /* 시트 이름이 "...(2)", "...(3)"처럼 같은 이름의 주차별 복사본이면 마지막 시트만 사용.
+         브랜드별로 이름이 다른 시트면(전체 다운로드 파일) 전부 사용. */
+      /* TU/SN 계열 파일은 주차마다 시트를 복사하므로 항상 마지막(최신) 시트만 사용 */
+      const tuSn = /^(TU|TU_SN|TN_SN)[\s_-]/i.test(file.name) ||
+        parsed.some(s => /sample\s*q'?ty/i.test(s.name)) ||
+        parsed.every(s => s.recs.every(r => ['TOUS', 'STANLEY', 'QUINCE'].includes(r.brand_full)));
+      const numbered = parsed.filter(s => /\(\d+\)\s*$/.test(s.name)).length;
+      const versioned = parsed.length > 1 && (tuSn || (parsed.length > 3 && numbered >= parsed.length / 2));
+      const use = versioned ? [parsed[parsed.length - 1]] : parsed;
+      if (versioned) note = `시트 ${parsed.length}개 중 최신 시트(${use[0].name})만 사용`;
+      use.forEach(s => recs.push(...s.recs));
+      files++;
+
+      const seen = new Set();
+      for (const rec of recs) {
+        brands.add(rec.brand_full);
+        const k = keyOf(rec);
+        let cur = R.find(x => keyOf(x) === k && !seen.has(x.id));
+        if (!cur) {
+          cur = R.find(x => x.brand_full === rec.brand_full &&
+            (x.season || '').toUpperCase() === (rec.season || '').toUpperCase() &&
+            (x.stage || '').toUpperCase().trim() === (rec.stage || '').toUpperCase().trim() &&
+            !seen.has(x.id));
+        }
+        if (cur) {
+          seen.add(cur.id);
+          const ch = {};
+          const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
+          for (const f of CMP) {
+            const a = norm(cur[f]), b = norm(rec[f]);
+            if (b !== '' && a !== b) { ch[f] = { from: a || '(없음)', to: b }; cur[f] = rec[f]; }
+          }
+          if (rec.remarks) cur.remarks = rec.remarks;
+          if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
+          if (Object.keys(ch).length) {
+            cur.changes = Object.assign({}, cur.changes, ch);
+            changedCells += Object.keys(ch).length; updated++;
+          }
+        } else {
+          R.unshift(Object.assign({
+            id: 'U' + (++seq), orig: '', season_n: '', stage_n: '', done: false, cancelled: false,
+            changes: {}, comment: '', isNew: true
+          }, rec));
+          added++;
+        }
+      }
+    }
+    BRANDS.length = 0;
+    [...new Set(R.map(r => r.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
+    /* 브랜드별 업로드 알림 갱신 (개발실 화면 상단에 표시, 개발실장 확인 전까지 빨간 점) */
+    if (brands.size) {
+      const now = new Date().toISOString();
+      brands.forEach(b => { UPMETA[b] = { at: now, ack: '' }; });
+      dirty('up_meta'); drawDev();
+    }
+    drawChips(); drawSales(); dirty('requests');
+    box.innerHTML = `<b>✔ 반영 완료</b> — 파일 ${files}개 · 브랜드 ${[...brands].join(', ')} ·
+      신규 <b>${added}</b>행 추가, <b>${updated}</b>행 갱신 (변경 셀 ${changedCells}개는 빨간 글씨 + Remark 자동 기입)
+      ${note ? '<br><span class="muted">' + esc(note) + '</span>' : ''}
+      ${xlsWarn ? '<br><span style="color:var(--critical)">샘플 펜딩 파일(.xls)은 .xlsx로 저장해서 올려주세요.</span>' : ''}`;
+  } catch (e) {
+    box.innerHTML = e.message === 'NO_DS'
+      ? '<b style="color:var(--critical)">이 브라우저는 엑셀 압축 해제를 지원하지 않습니다.</b> Chrome 또는 Edge에서 열어주세요.'
+      : '<b style="color:var(--critical)">읽기 실패:</b> ' + esc(e.message);
+  }
+}
+
+el('file-input').onchange = e => { handleUpload([...e.target.files]); e.target.value = ''; };
+el('btn-upload').onclick = () => el('file-input').click();
+
+/* ---------- Drag & Drop: 각 탭 어디에나 파일을 끌어다 놓으면 업로드 ---------- */
+function bindDrop(panelId, handler) {
+  const zone = el(panelId);
+  ['dragenter', 'dragover'].forEach(t => zone.addEventListener(t, e => {
+    e.preventDefault(); zone.classList.add('dropping');
+  }));
+  ['dragleave', 'drop'].forEach(t => zone.addEventListener(t, e => {
+    e.preventDefault();
+    if (t === 'dragleave' && zone.contains(e.relatedTarget)) return;
+    zone.classList.remove('dropping');
+    if (t === 'drop') {
+      const files = [...e.dataTransfer.files].filter(f => /\.(xlsx|xls)$/i.test(f.name));
+      if (files.length) handler(files);
+    }
+  }));
+}
+bindDrop('p-sales', handleUpload);
+bindDrop('p-dev', files => {
+  if (ROLE !== 'DEV') {
+    const box = el('dev-log'); box.style.display = 'block';
+    box.innerHTML = '<b style="color:var(--critical)">' +
+      (LANG === 'en' ? 'Switch to sample-room mode to upload here.'
+       : LANG === 'vi' ? 'Chuyển sang chế độ phòng mẫu để tải lên.'
+       : '개발실 파일 업로드는 개발실 모드에서만 가능합니다.') + '</b>';
+    return;
+  }
+  handleDevUpload(files);
+});
+bindDrop('p-cost', files => {
+  if (ROLE !== 'DEV') {
+    const box = el('cost-log'); box.style.display = 'block';
+    box.innerHTML = '<b style="color:var(--critical)">' +
+      (LANG === 'en' ? 'Switch to sample-room mode to upload here.'
+       : LANG === 'vi' ? 'Chuyển sang chế độ phòng mẫu để tải lên.'
+       : '원가 파일 업로드는 개발실 모드에서만 가능합니다.') + '</b>';
+    return;
+  }
+  handleCostUpload(files);
+});
+
+/* ---------- 개발실 파일 업로드 (관리자) ---------- */
+const DEV_FIELD = h => {
+  const t = (h || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (/request/.test(t)) return 'req_date';
+  if (/in char/.test(t)) return 'in_charge';
+  if (/sample type/.test(t)) return 'sample_type';
+  if (/division/.test(t)) return 'division';
+  if (/season/.test(t)) return 'season';
+  if (/^group/.test(t)) return 'group';
+  if (/style/.test(t)) return 'style';
+  if (/color/.test(t)) return 'color';
+  if (/q\.?ty|수량/.test(t)) return 'qty';
+  if (/^hw$/.test(t)) return 'sh_hw';
+  if (/zipper/.test(t)) return 'sh_zip';
+  if (/main.*mtrl|main.*mat/.test(t)) return 'sh_mtrl';
+  if (/deli|ngày xuất/.test(t)) return 'deli';
+  if (/^cut/.test(t)) return 'cut';
+  if (/painting/.test(t)) return 'painting';
+  if (/sewing/.test(t)) return 'sewing';
+  if (/finish/.test(t)) return 'finished';
+  if (/pattern/.test(t)) return 'pattern';
+  if (/remark/.test(t)) return 'remark';
+  if (/^line/.test(t)) return 'line';
+  return null;
+};
+const PFX = [['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
+             ['BE','BEIS'],['SN','STANLEY'],['ME','MEEM'],['KE','KEEK'],['QU','QUINCE'],
+             ['MJ','MARC JACOB'],['UG','UGG']];
+
+/* 사진 축소: 서버 저장 용량·시간 제한 대응 (긴 변 220px JPEG). 브라우저가 못 읽는
+   그림(EMF 스케치 등)은 제외 — RECAP 재업로드 시 기존 사진이 대신 유지됨 */
+async function shrinkPhoto(src) {
+  if (!src) return '';
+  if (src.length < 12000) return src;                 /* ~9KB 미만은 그대로 */
+  try {
+    const img = new Image();
+    await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = src; });
+    const sc = Math.min(1, 220 / Math.max(img.width || 1, img.height || 1));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round((img.width || 1) * sc));
+    c.height = Math.max(1, Math.round((img.height || 1) * sc));
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(img, 0, 0, c.width, c.height);
+    const out = c.toDataURL('image/jpeg', 0.72);
+    return out.length < src.length ? out : src;
+  } catch (e) { return ''; }
+}
+async function shrinkImages(sheets) {
+  for (const s of sheets) {
+    if (!s.images) continue;
+    for (const k of Object.keys(s.images)) s.images[k] = await shrinkPhoto(s.images[k]);
+  }
+}
+/* 같은 스타일 블록에 사진이 하나라도 있으면 블록 전체에 전파 */
+function spreadPhotos(list) {
+  const by = {};
+  list.forEach(e => {
+    const k = (e.line || '') + '|' + String(e.style || '').toUpperCase();
+    if (e.photo && !by[k]) by[k] = e.photo;
+  });
+  list.forEach(e => {
+    const k = (e.line || '') + '|' + String(e.style || '').toUpperCase();
+    if (!e.photo && by[k]) e.photo = by[k];
+  });
+  return list;
+}
+function devSheetToRecords(sheetName, rows, imgs) {
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++)
+    if ((rows[i] || []).some(c => /request\s*date/i.test((c || '').trim()))) { hi = i; break; }
+  if (hi < 0) return [];
+  const below = rows[hi + 1] || [];
+  const map = {};
+  rows[hi].forEach((c, j) => { const f = DEV_FIELD(c); if (f && !(f in map)) map[f] = j; });
+  below.forEach((c, j) => { const f = DEV_FIELD(c); if (f && !(f in map)) map[f] = j; });
+  const lineFromSheet = (sheetName.match(/LINE\s*(\d+)/i) || [])[1];
+  const out = [];
+  let last = null;
+  for (let i = hi + 2; i < rows.length; i++) {
+    const row = rows[i]; if (!row || !row.length) continue;
+    const g = f => (map[f] != null ? (row[map[f]] || '').trim() : '');
+    if (/^total$/i.test(g('qty')) || row.some(c => /^total$/i.test((c || '').trim()))) continue;
+    if (!g('req_date') && !g('style') && !g('color')) continue;
+    const e = {};
+    ['req_date','in_charge','sample_type','division','season','group','style','color','qty',
+     'sh_hw','sh_zip','sh_mtrl','deli','cut','painting','sewing','finished','pattern','remark']
+      .forEach(f => e[f] = g(f));
+    e.line = g('line') ? 'L' + g('line').replace(/[^0-9]/g, '') : (lineFromSheet ? 'L' + lineFromSheet : (last ? last.line : 'L?'));
+    if (!e.group && last) e.group = last.group;
+    if (!e.style && last) e.style = last.style;
+    const s = (e.style || '').toUpperCase();
+    e.brand = (PFX.find(p => s.startsWith(p[0])) || [])[1] ||
+      (/TOUS/i.test(e.group) ? 'TOUS' : (last ? last.brand : 'ETC'));
+    e.qty_n = +(String(e.qty).split('->').pop().replace(/[^0-9]/g, '')) || 0;
+    const stages = [['CUT', e.cut], ['PAINTING', e.painting], ['SEWING', e.sewing], ['FINISHED', e.finished]];
+    const planned = stages.filter(s2 => s2[1]);
+    const done = planned.filter(s2 => /^\d{4}-\d{2}-\d{2}/.test(s2[1]) && s2[1] <= TODAY);
+    e.progress = done.length;
+    e.stage_label = done.length ? done[done.length - 1][0] : (planned.length ? '예정' : 'WAITING');
+    e.deli_soon = /^\d{4}-\d{2}-\d{2}/.test(e.deli || '') && e.deli <= SOON_END;
+    e.shortage = [e.sh_hw, e.sh_zip, e.sh_mtrl].filter(x => x && x.toUpperCase() !== 'OK').join(' / ');
+    e.photo = (imgs && imgs[i + 1]) || (last && last.style === e.style ? last.photo : '') || '';
+    last = e;
+    out.push(e);
+  }
+  return spreadPhotos(out);
+}
+
+const e0FromRecap = e => !e.src_name;   /* 마켓 차트 파일 유래 행은 src_name 보유 */
+const buyerCodes = e => {
+  const set = new Set();
+  for (const k of ['group', 'style', 'pattern']) {
+    const s = String(e[k] || '').toUpperCase();
+    (s.match(/[A-Z]{2}\d{6}/g) || []).forEach(c => set.add(c));          /* 바이어 코드 (예: SV360072) */
+    (s.match(/[A-Z]{2,3}\d{3,5}-\d+\b/g) || []).forEach(c => set.add(c)); /* JS 패턴 코드 (예: ST6090-7) */
+  }
+  return [...set];
+};
+const dupKeys = e => buyerCodes(e).map(c =>
+  e.brand + '|' + c + '|' + String(e.color || '').toUpperCase().replace(/\s+/g, ' ').trim());
+/* 마켓 차트와 RECAP 양쪽에 있는 스타일은 차트 행만 남긴다 (차트 파일의 완료분 포함) */
+function dedupeMarket() {
+  const chart = new Set();
+  E.filter(e => e.src_name && e.source === 'MARKET').forEach(e => dupKeys(e).forEach(k => chart.add(k)));
+  Object.values(MKCOV).forEach(list => (list || []).forEach(k => chart.add(k)));
+  let removed = 0;
+  for (let i = E.length - 1; i >= 0; i--) {
+    const e = E[i];
+    if (!e.src_name && e.source === 'MARKET') {
+      if (dupKeys(e).some(k => chart.has(k))) { E.splice(i, 1); removed++; }
+    }
+  }
+  return removed;
+}
+async function handleDevUpload(fileList) {
+  const box = el('dev-log'); box.style.display = 'block';
+  box.innerHTML = '<span class="muted">읽는 중…</span>';
+  try {
+    let added = 0, photoN = 0, pendN = 0, files = 0, srcs = new Set(), xlsWarn = false;
+    for (const file of fileList) {
+      if (/\.xls$/i.test(file.name)) { xlsWarn = true; continue; }
+      const sheets = await XR.readSheets(await file.arrayBuffer());
+      await shrinkImages(sheets);                     /* 서버 저장 실패 방지: 사진 축소 */
+      let recs = [];
+      sheets.forEach(s => devSheetToRecords(s.name, s.rows, s.images).forEach(r => recs.push(r)));
+      let src = 'SAMPLE';   /* RECAP 형식 기본값 — 행별로 마켓/샘플 재분류됨 */
+      /* 샘플 펜딩(노란색 하이라이트) 파일이면 미접수로 반영 */
+      if (!recs.length) {
+        const pend = []; let pTot = 0, pMk = 0, pSp = 0;
+        sheets.forEach(s => { const got = pendingFromSheet(s); pTot += got.totBal || 0; pMk += got.mkBal || 0; pSp += got.spBal || 0; got.forEach(p => pend.push(p)); });
+        if (pend.length) {
+          PEND.length = 0; pend.forEach(p => PEND.push(p));
+          PENDMETA.total_balance = pTot;
+          PENDMETA.market_balance = pMk;
+          PENDMETA.sample_balance = pSp;
+          PENDMETA.yellow_balance = pend.reduce((s2, p2) => s2 + p2.balance_n, 0);
+          pendN += pend.length; files++;
+          drawDev();
+          continue;
+        }
+      }
+      let mkScanned = 0;
+      if (!recs.length) {                       /* SAMPLE RECAP 양식이 아니면 마켓 샘플 차트로 해석 */
+        const brand = BRAND_FROM_NAME(file.name);
+        const name = file.name.replace(/\.xlsx$/i, '');
+        const cov = new Set(MKCOV[brand] || []);
+        sheets.forEach(s => {
+          const got = marketSheetToRecords(s, brand, name);
+          mkScanned += got.scanned || 0;
+          (got.coverKeys || []).forEach(k => cov.add(k));
+          got.forEach(r => recs.push(r));
+        });
+        if (mkScanned) MKCOV[brand] = [...cov];
+        src = 'MARKET';
+        /* 전부 완료된 마켓 파일: 해당 브랜드 마켓 데이터 비우기 */
+        if (!recs.length && mkScanned > 0) {
+          for (let i = E.length - 1; i >= 0; i--)
+            if (E[i].source === 'MARKET' && E[i].brand === brand) E.splice(i, 1);
+          srcs.add('MARKET'); files++;
+          drawDev();
+          continue;
+        }
+      }
+      if (!recs.length) continue;
+      srcs.add(src);
+      /* 마켓은 같은 파일(브랜드) 단위로, 그 외는 구분 전체를 최신 파일로 교체 */
+      if (src === 'MARKET') {
+        const key = recs[0].brand;
+        for (let i = E.length - 1; i >= 0; i--)
+          if (E[i].source === 'MARKET' && E[i].brand === key && E[i].src_name) E.splice(i, 1);
+      } else {
+        /* SAMPLE RECAP 재업로드: 기존 사진 보존(브라우저가 못 읽는 EMF 스케치 등) 후 RECAP 유래 행 전체 교체 */
+        const oldPh = {};
+        E.forEach(x => {
+          if (x.src_name || !x.photo) return;
+          const sk = (x.line || '') + '|' + String(x.style || '').toUpperCase();
+          oldPh[sk + '|' + String(x.color || '').toUpperCase()] = x.photo;
+          if (!oldPh[sk]) oldPh[sk] = x.photo;
+        });
+        for (let i = E.length - 1; i >= 0; i--)
+          if (!E[i].src_name) E.splice(i, 1);
+        recs.forEach(r => {
+          if (r.photo) return;
+          const sk = (r.line || '') + '|' + String(r.style || '').toUpperCase();
+          r.photo = oldPh[sk + '|' + String(r.color || '').toUpperCase()] || oldPh[sk] || '';
+        });
+      }
+      const MKRE = /마켓|MKT|MARKET|\bSMS\b/i;
+      recs.forEach((r, i) => {
+        r.id = 'X' + Date.now().toString(36) + i;
+        r.source = src === 'MARKET' ? 'MARKET'
+          : (MKRE.test([r.sample_type, r.division].join(' ')) ? 'MARKET' : 'SAMPLE');
+        E.push(r);
+      });
+      photoN += recs.filter(r => r.photo).length;
+      added += recs.length;
+    }
+    const deduped = dedupeMarket();
+    drawDev();
+    if (added) dirty('execs', 'mk_cover');
+    if (pendN) dirty('pending', 'pending_meta');
+    box.innerHTML = `<b>✔ OK</b> — ${[...srcs].map(s => s === 'MARKET' ? T('s_market') : T('s_sample')).join(', ') || T('s_pending')} ·
+      ${pendN ? `<b>${T('s_pending')} ${pendN}</b> · ` : ''}
+      <b>${added}</b>행 반영${photoN ? ` · 사진 <b>${photoN}</b>장 자동 추출` : ''}${deduped ? ` · 중복 ${deduped}행 제외` : ''} (같은 브랜드의 기존 데이터는 교체)
+      ${xlsWarn ? '<br><span style="color:var(--critical)">⚠ .xls 파일은 브라우저에서 읽을 수 없습니다 — 엑셀에서 [다른 이름으로 저장 → .xlsx]로 저장한 뒤 다시 올려주세요. (샘플 펜딩/생산계획서 파일)</span>' : ''}`;
+  } catch (err) {
+    box.innerHTML = '<b style="color:var(--critical)">읽기 실패:</b> ' + esc(err.message);
+  }
+}
+el('btn-dev-upload').onclick = () => el('dev-file').click();
+el('dev-file').onchange = e => { handleDevUpload([...e.target.files]); e.target.value = ''; };
+
+/* ---------- 마켓 샘플 파일 파서 (브라우저) ---------- */
+const MK_FIELD = [
+  ['season',   /^season$/],
+  ['stage',    /sample\s*stage|^stage$|^type$|^sample\s*\/?\s*costing/],
+  ['pattern',  /pattern\s*no|pattern\s*#/],
+  ['style',    /^style\s*no|^style$|^erp#$/],
+  ['group',    /style\s*group\s*name|group\s*name|style\s*name|^collection$|^shape$/],
+  ['color',    /color\s*name|^color$/],
+  ['qty',      /total\s*q'?ty|^ttl$|^total$|^q'?\.?ty$/],
+  ['deli',     /sample\s*x-?date|x-?date|xf-?dat|^delivery$/],
+  ['ws',       /w\/?s\s*pass|worksheet\s*pass|^ws$/],
+  ['mtrl',     /^mtrl$|material\s*status|^body$/],
+  ['zip',      /zipper/],
+  ['hw',       /^hw$/],
+  ['maker',    /pattern\s*maker/],
+  ['cut',      /^cutting$/],
+  ['sewing',   /^sewing$/],
+  ['finished', /^finished$|sample\s*status/],
+  ['line',     /^line$/],
+  ['fin_qty',  /finished\s*q'?ty/],
+  ['balance',  /^balance$/],
+  ['remark',   /^remarks?$|final\s*comment/],
+];
+const mkField = h => {
+  const t = (h || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const hit = MK_FIELD.find(([, re]) => re.test(t));
+  return hit ? hit[0] : null;
+};
+const BRAND_FROM_NAME = n => {
+  const u = n.toUpperCase();
+  if (/TOUS|^TU/.test(u)) return 'TOUS';
+  if (/GUESS|^GF|^GS/.test(u)) return 'GUESS';
+  if (/^CH[_ -]|COACH/.test(u)) return 'CH';
+  if (/^ST[_ -]|STAUD/.test(u)) return 'STAUD';
+  if (/STANLEY|^SN/.test(u)) return 'STANLEY';
+  if (/AMAZON|^AM/.test(u)) return 'AMAZON';
+  if (/BEIS|^BE/.test(u)) return 'BEIS';
+  return 'ETC';
+};
+
+function marketSheetToRecords(sheet, brand, srcName) {
+  const rows = sheet.rows, imgs = sheet.images || {};
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++)
+    if ((rows[i] || []).filter(c => mkField(c)).length >= 5) { hi = i; break; }
+  if (hi < 0) return [];
+  const multi = {};
+  rows[hi].forEach((c, j) => { const k = mkField(c); if (k) (multi[k] = multi[k] || []).push(j); });
+  /* 샘플 진행 차트가 아니면(선적 스케줄 등) 무시: CUTTING/SEWING/FINISHED Q'TY/BALANCE 헤더 필요 */
+  if (!(multi.cut || multi.sewing || multi.fin_qty || multi.balance)) return [];
+  const out = []; let last = null; let scanned = 0; const cover = new Set();
+  for (let i = hi + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const g = k => { for (const j of (multi[k] || [])) { const v = (row[j] || '').trim(); if (v) return v; } return ''; };
+    if (!(g('style') || g('pattern') || g('color'))) continue;
+    if (/^total$/i.test(g('style'))) continue;
+    scanned++;
+    /* 이 차트 파일이 다루는 스타일 키(완료분 포함) — RECAP 중복 제거용 */
+    dupKeys({ brand, group: g('group'), style: g('style'), pattern: g('pattern'), color: g('color') })
+      .forEach(k => cover.add(k));
+    /* 완료 건 제외: 잔량(BALANCE) 0 또는 FINISHED Q'TY에 숫자 + 음영 */
+    const balRaw = g('balance');
+    const balN = /^\d+(\.\d+)?$/.test(balRaw) ? Math.round(+balRaw) : null;
+    if (balN === 0) continue;
+    if (multi.fin_qty) {
+      const j = multi.fin_qty[0];
+      const v = (row[j] || '').trim();
+      if (/^\d+(\.\d+)?$/.test(v) && row.fills && row.fills[j]) continue;
+    }
+    const e = {
+      brand, source: 'MARKET', src_name: srcName, division: 'MARKET',
+      season: g('season'), style: g('style') || g('pattern'), pattern: g('pattern'),
+      group: g('group'), color: g('color'),
+      qty: balN != null ? String(balN) : g('qty'),   /* 마켓은 잔량(Balance) 기준 */
+      balance_n: balN != null ? balN : undefined,
+      deli: g('deli'),
+      req_date: g('ws'), sh_hw: g('hw'), sh_zip: g('zip'), sh_mtrl: g('mtrl'),
+      cut: g('cut'), painting: '', sewing: g('sewing'), finished: g('finished'),
+      in_charge: g('maker'), pattern_maker: g('maker'), remark: g('remark'),
+    };
+    /* mk_style: 바이어 Style 번호 (GUESS F열). TOUS는 스타일 번호가 없어 빈칸 */
+    if (e.pattern && !/\d/.test(e.style)) { e.group = (e.group + ' ' + e.style).trim(); e.style = e.pattern; e.mk_style = ''; }
+    else e.mk_style = (e.style && e.style !== e.pattern) ? e.style : '';
+    const ln = g('line');
+    e.line = /\d/.test(ln) ? 'L' + ln.replace(/[^0-9]/g, '') : (last ? last.line : 'L?');
+    ['group', 'style', 'season'].forEach(k => { if (!e[k] && last) e[k] = last[k]; });
+    e.photo = imgs[i + 1] || (last && last.style === e.style ? last.photo : '');
+    const st = (g('stage') || '').toUpperCase();
+    e.sample_type = 'MARKET' + (['HB', 'SLG'].includes(st) ? ' (' + st + ')' : (st && st !== 'MARKET' ? ' · ' + st : ''));
+    e.qty_n = +(String(e.qty).split('->').pop().replace(/[^0-9]/g, '')) || 0;
+    const stages = [['CUT', e.cut], ['SEWING', e.sewing], ['FINISHED', e.finished]];
+    const planned = stages.filter(s => s[1]);
+    let done = planned.filter(s => /^\d{4}-\d{2}-\d{2}/.test(s[1]) && s[1] <= TODAY);
+    if (String(e.finished).toUpperCase() === 'DONE') done = stages;
+    e.progress = Math.min(4, done.length + (done.length === 3 ? 1 : 0));
+    e.stage_label = done.length ? done[done.length - 1][0] : (planned.length ? '예정' : 'WAITING');
+    e.deli_soon = /^\d{4}-\d{2}-\d{2}/.test(e.deli || '') && e.deli >= TODAY && e.deli <= SOON_END;
+    e.shortage = [e.sh_hw, e.sh_zip, e.sh_mtrl]
+      .filter(x => x && !/OK/i.test(x) && !/^READY$/i.test(x)).join(' / ');
+    last = e; out.push(e);
+  }
+  spreadPhotos(out);
+  out.scanned = scanned;
+  out.coverKeys = [...cover];
+  return out;
+}
+
+/* ---------- 샘플 펜딩(노란색 하이라이트) 파서 ---------- */
+const YELLOW = c => /^FF(FF|F[0-9A-F])00$|^FFFF[0-9A-F]{2}$|^FFF[0-9A-F]{3}$/.test(c) ||
+  ['FFFF00','FFFF99','FFFFCC','FFF200','FFEB9C','FFFFA6'].includes(c);
+const PB = { TU:'TOUS', ST:'STAUD', GS:'GUESS', GF:'GUESS', AM:'AMAZON', BE:'BEIS',
+             CH:'CH', SN:'STANLEY', ME:'MEEM', QN:'QUINCE', UG:'UGG', GAP:'GAP' };
+function pendingFromSheet(sheet) {
+  const rows = sheet.rows;
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++)
+    if ((rows[i] || []).some(c => /^buyer$/i.test((c || '').trim()))) { hi = i; break; }
+  if (hi < 0) return [];
+  const map = {};
+  rows[hi].forEach((c, j) => {
+    const t = (c || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const k = /^buyer/.test(t) ? 'buyer' : /^division/.test(t) ? 'division' : /^group/.test(t) ? 'group'
+      : /^pattern/.test(t) ? 'pattern' : /구\s*분|phan loai/.test(t) ? 'gubun' : /^line/.test(t) ? 'line'
+      : /^style/.test(t) ? 'style' : /총수량|tong sl/.test(t) ? 'qty' : /잔량|con lai/.test(t) ? 'balance'
+      : /^del/.test(t) ? 'deli' : /비고/.test(t) ? 'note' : null;
+    if (k && !(k in map)) map[k] = j;
+  });
+  if (!('buyer' in map)) return [];
+  const expCol = map.buyer > 0 ? map.buyer - 1 : null;   /* B열: 접수 예정일 (헤더 없음) */
+  let cut = rows.length;
+  for (let i = 0; i < rows.length; i++)
+    if ((rows[i] || []).some(c => /계획\s*외/.test(c || ''))) { cut = i; break; }
+  const out = []; let totBal = 0, mkBal = 0, spBal = 0;
+  const MKB = /마켓|MKT|MARKET|SMS/i;
+  for (let i = hi + 1; i < cut; i++) {
+    const row = rows[i] || [];
+    const fills = row.fills || {};
+    const isYel = Object.values(fills).some(YELLOW);
+    const buyerV = (map.buyer != null ? (row[map.buyer] || '').trim() : '');
+    if (buyerV && !/^buyer$/i.test(buyerV)) {
+      const bm = String(map.balance != null ? (row[map.balance] || '') : '').split('.')[0].match(/\d+/);
+      if (bm) {
+        totBal += +bm[0];
+        if (!isYel) {
+          const g2 = (map.gubun != null ? (row[map.gubun] || '') : '') + ' ' + (map.style != null ? (row[map.style] || '') : '');
+          if (MKB.test(g2)) mkBal += +bm[0]; else spBal += +bm[0];
+        }
+      }
+    }
+    if (!isYel) continue;
+    const g = k => (map[k] != null ? (row[map[k]] || '').trim() : '');
+    const code = g('buyer').toUpperCase();
+    const n = s => { const m = String(s).replace(/,/g, '').match(/\d+/); return m ? +m[0] : 0; };
+    if (!code && !g('style')) continue;
+    out.push({ buyer: code, brand: PB[code] || code || 'ETC', division: g('division'), group: g('group'),
+      gubun: g('gubun'), pattern: g('pattern'), style: g('style'), line: g('line'),
+      exp: expCol != null ? (row[expCol] || '').trim() : '',
+      qty: g('qty'), balance: g('balance'), deli: g('deli'), note: g('note'),
+      qty_n: n(g('qty')), balance_n: n(g('balance')) || n(g('qty')), id: 'U' + i });
+  }
+  out.totBal = totBal; out.mkBal = mkBal; out.spBal = spBal;
+  return out;
+}
+
+/* ---------- 원가(COSTING PENDING) 업로드 ---------- */
+const CB = { GUESS:'GUESS', TOUS:'TOUS', CH:'CH', ST:'STAUD', STAUD:'STAUD', AMAZON:'AMAZON',
+  AM:'AMAZON', BEIS:'BEIS', BE:'BEIS', STANLEY:'STANLEY', SN:'STANLEY', MEEM:'MEEM',
+  UGG:'UGG', QUINCE:'QUINCE', KEEK:'KEEK', GAP:'GAP' };
+function costingFromSheet(sheet) {
+  const rows = sheet.rows;
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 12); i++)
+    if ((rows[i] || []).some(c => /ws\s*received/i.test((c || '').trim()))) { hi = i; break; }
+  if (hi < 0) return [];
+  const map = {};
+  rows[hi].forEach((c, j) => {
+    const t = (c || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const k = /ws received/.test(t) ? 'ws_date' : /^buyer/.test(t) ? 'buyer' : /^group/.test(t) ? 'group'
+      : /^style/.test(t) ? 'style' : /^pattern/.test(t) ? 'pattern' : /용도/.test(t) ? 'purpose'
+      : /요청/.test(t) ? 'req_date' : /완료예정/.test(t) ? 'due' : /실제 완료|ngay xong/.test(t) ? 'done'
+      : /담당/.test(t) ? 'owner' : /remark/.test(t) ? 'remark' : null;
+    if (k && !(k in map)) map[k] = j;
+  });
+  if (!('style' in map)) return [];
+  const out = [];
+  for (let i = hi + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    /* 색이 칠해진(처리 완료) 행 제외 — 흰색 배경은 색으로 치지 않음 */
+    if (row.fills && Object.values(row.fills).some(c => c && c !== 'FFFFFF')) continue;
+    const g = k => (map[k] != null ? (row[map[k]] || '').trim() : '');
+    if (!(g('ws_date') || g('style') || g('pattern'))) continue;
+    if (g('done')) continue;                          /* 실제 완료일 입력 = 완료 행 제외 */
+    const e = { ws_date: g('ws_date'), buyer: g('buyer'), group: g('group'), style: g('style'),
+      pattern: g('pattern'), purpose: g('purpose'), req_date: g('req_date'), due: g('due'),
+      done: '', owner: g('owner'), remark: g('remark') };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(e.ws_date)) { e.remark = (e.ws_date + ' ' + e.remark).trim(); e.ws_date = ''; }
+    e.brand = CB[(e.buyer || '').toUpperCase()] || (e.buyer || '').toUpperCase() || 'ETC';
+    e.state = 'OPEN';
+    e.late = !!e.due && e.due < TODAY;
+    e.id = 'C' + i;
+    out.push(e);
+  }
+  return out;
+}
+async function handleCostUpload(fileList) {
+  const box = el('cost-log'); box.style.display = 'block';
+  box.innerHTML = '<span class="muted">…</span>';
+  try {
+    let n = 0;
+    for (const file of fileList) {
+      if (/\.xls$/i.test(file.name)) { box.innerHTML = '<b style="color:var(--critical)">.xlsx</b>'; return; }
+      const sheets = await XR.readSheets(await file.arrayBuffer());
+      const recs = [];
+      sheets.forEach(s => costingFromSheet(s).forEach(r => recs.push(r)));
+      if (!recs.length) continue;
+      /* 완료 예정일 오름차순 (빈 값은 맨 뒤) */
+      recs.sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') ||
+        (a.req_date || a.ws_date || '').localeCompare(b.req_date || b.ws_date || ''));
+      COST.length = 0; recs.forEach(r => COST.push(r));
+      n += recs.length;
+    }
+    drawCost();
+    if (n) dirty('costing');
+    box.innerHTML = `<b>✔ OK</b> — COSTING PENDING <b>${n}</b>`;
+  } catch (err) { box.innerHTML = '<b style="color:var(--critical)">' + esc(err.message) + '</b>'; }
+}
+el('btn-cost-upload').onclick = () => el('cost-file').click();
+el('cost-file').onchange = e => { handleCostUpload([...e.target.files]); e.target.value = ''; };
+
+/* ---------- 바이어별 작업 분포도 (SCORE.xlsx) ---------- */
+const SC_PFX = [['GF','GF'],['GS','GF'],['ST','ST'],['CH','CH'],['TU','TU'],['AM','AM'],['BE','BE'],
+  ['SN','SN'],['ME','ME'],['KE','KE'],['QN','QN'],['MJ','MJ'],['UG','UG'],['KS','KS'],['AY','AY'],['F','F']];
+const scBrand = (pat, style) => {
+  for (const s of [pat, style]) {
+    const uu = String(s || '').toUpperCase().replace(/^'/, '').trim();
+    for (const [p, b] of SC_PFX) if (uu.startsWith(p)) return b;
+  }
+  return 'ETC';
+};
+function scoreFromSheets(sheets) {
+  const out = {};
+  for (const sh of sheets) {
+    if (!/^20\d\d/.test(sh.name)) continue;
+    const rows = sh.rows;
+    const hdr = rows[1] || [];
+    const pm = hdr.indexOf('패턴사'), ln = hdr.indexOf('작업라인');
+    if (pm < 0 || ln < 0) continue;
+    let patSc = -1, lineSc = -1;
+    for (let i = pm; i < ln; i++) if ((hdr[i] || '') === '점수') patSc = i;
+    for (let i = ln; i < hdr.length; i++) if ((hdr[i] || '').startsWith('점수')) lineSc = i;
+    const patCol = pm === 5 ? 4 : 5;
+    const pat = {}, line = {};
+    let nRows = 0;
+    for (let r = 3; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const maker = (row[pm] || '').trim(), lv = (row[ln] || '').trim();
+      if (!maker && !lv) continue;
+      nRows++;
+      const b = scBrand(row[patCol], row[3]);
+      const ps = /^-?\d+(\.\d+)?$/.test(row[patSc] || '') ? +row[patSc] : null;
+      const ls = /^-?\d+(\.\d+)?$/.test(row[lineSc] || '') ? +row[lineSc] : null;
+      if (maker) {
+        const key = maker.charAt(0).toUpperCase() + maker.slice(1).toLowerCase();
+        const dd = (pat[key] = pat[key] || {}); const a = (dd[b] = dd[b] || [0, 0, 0]);
+        a[0]++; if (ps !== null) { a[1] += ps; a[2]++; }
+      }
+      if (/^\d+$/.test(lv)) {
+        const dd = (line['L' + lv] = line['L' + lv] || {}); const a = (dd[b] = dd[b] || [0, 0, 0]);
+        a[0]++; if (ls !== null) { a[1] += ls; a[2]++; }
+      }
+    }
+    out[sh.name] = { pat, line, rows: nRows };
+  }
+  return out;
+}
+async function handleScoreUpload(fileList) {
+  const box = el('score-log'); box.style.display = 'block';
+  box.innerHTML = '<span class="muted">…</span>';
+  try {
+    for (const file of fileList) {
+      if (/\.xls$/i.test(file.name)) { box.innerHTML = '<b style="color:var(--critical)">.xlsx</b>'; return; }
+      const sheets = await XR.readSheets(await file.arrayBuffer());
+      const got = scoreFromSheets(sheets);
+      const years = Object.keys(got);
+      if (!years.length) continue;
+      years.forEach(y => { SCORE[y] = got[y]; });
+      drawScore(); dirty('score');
+      box.innerHTML = `<b>✔ OK</b> — ${years.join(', ')} · ${years.reduce((s, y) => s + got[y].rows, 0).toLocaleString()} rows`;
+      return;
+    }
+    box.innerHTML = '<b style="color:var(--critical)">?</b>';
+  } catch (err) { box.innerHTML = '<b style="color:var(--critical)">' + esc(err.message) + '</b>'; }
+}
+el('btn-score-upload').onclick = () => el('score-file').click();
+el('score-file').onchange = e => { handleScoreUpload([...e.target.files]); e.target.value = ''; };
+bindDrop('p-score', files => {
+  if (ROLE !== 'DEV') {
+    const box = el('score-log'); box.style.display = 'block';
+    box.innerHTML = '<b style="color:var(--critical)">' +
+      (LANG === 'en' ? 'Switch to sample-room mode to upload here.'
+       : LANG === 'vi' ? 'Chuyển sang chế độ phòng mẫu để tải lên.'
+       : 'SCORE 파일 업로드는 개발실 모드에서만 가능합니다.') + '</b>';
+    return;
+  }
+  handleScoreUpload(files);
+});
+
+/* ================= Supabase 동기화 (온라인 빌드 전용) ================= */
+const SB_URL = 'https://tdjvglynvdjxvgbtskki.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkanZnbHludmRqeHZnYnRza2tpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQxMzcsImV4cCI6MjEwMDE5MDEzN30.p5nBDBHkwZ1fB7vkxLoMq-krox_GcuFt8wzTHS0TVDw';
+const SB_H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+
+let SYNC_DIRTY = new Set(), SYNC_TIMER = null, SYNC_BUSY = false;
+let SYNC_TS = window.__SYNC_TS__ || '';
+
+function sbStatus(txt, cls) {
+  const s = el('sb-status');
+  if (s) { s.textContent = txt; s.className = 'sbst ' + (cls || ''); }
+}
+const SB_SETS = () => ({
+  requests: R, execs: E, pending: PEND, costing: COST,
+  pending_meta: PENDMETA, score: SCORE, mk_cover: MKCOV, up_meta: UPMETA,
+});
+
+async function sbPush() {
+  if (SYNC_BUSY) { SYNC_TIMER = setTimeout(sbPush, 1000); return; }
+  const names = [...SYNC_DIRTY];
+  if (!names.length) return;
+  SYNC_DIRTY.clear(); SYNC_BUSY = true;
+  sbStatus('저장 중…', 'busy');
+  try {
+    const all = SB_SETS();
+    const rows = names.map(n => ({ name: n, value: all[n], updated_by: ROLE, updated_at: new Date().toISOString() }));
+    const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?on_conflict=name', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation' }, SB_H),
+      body: JSON.stringify(rows),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    (await r.json()).forEach(x => { if (x.updated_at > SYNC_TS) SYNC_TS = x.updated_at; });
+    if (names.includes('execs'))   /* 시딩용 분할 행 정리 */
+      fetch(SB_URL + '/rest/v1/jsv_datasets?name=like.execs:*', { method: 'DELETE', headers: SB_H }).catch(() => {});
+    sbStatus('저장됨 ' + new Date().toLocaleTimeString().replace(/:\d+$/, ''), 'ok');
+  } catch (e) {
+    names.forEach(n => SYNC_DIRTY.add(n));
+    sbStatus('저장 실패 — 자동 재시도', 'err');
+    SYNC_TIMER = setTimeout(sbPush, 6000);
+  }
+  SYNC_BUSY = false;
+}
+
+DIRTY_IMPL = (...names) => {
+  names.forEach(n => SYNC_DIRTY.add(n));
+  clearTimeout(SYNC_TIMER);
+  SYNC_TIMER = setTimeout(sbPush, 1500);
+  sbStatus('저장 대기…', 'busy');
+};
+
+window.addEventListener('beforeunload', e => {
+  if (SYNC_DIRTY.size || SYNC_BUSY) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* 다른 사람이 저장하면(내 미저장 변경이 없을 때) 화면 이동 없이 데이터만 갈아끼움 —
+   보고 있던 탭·칩·검색·스크롤 상태는 그대로 유지 */
+async function sbRefresh() {
+  const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?select=name,value,updated_at&name=neq.app_html', { headers: SB_H });
+  if (!r.ok) return;
+  const rows = await r.json();
+  const D = {}, chunks = {};
+  rows.forEach(x => {
+    if (x.updated_at > SYNC_TS) SYNC_TS = x.updated_at;
+    const m = x.name.match(/^(.+):(\d+)$/);
+    if (m) (chunks[m[1]] = chunks[m[1]] || [])[+m[2]] = x.value;
+    else D[x.name] = x.value;
+  });
+  for (const k in chunks) if (!(k in D)) D[k] = [].concat.apply([], chunks[k].filter(Boolean));
+  const putArr = (a, v) => { a.length = 0; (v || []).forEach(x => a.push(x)); };
+  const putObj = (o, v) => { Object.keys(o).forEach(k => delete o[k]); Object.assign(o, v || {}); };
+  putArr(R, D.requests); putArr(E, D.execs); putArr(PEND, D.pending); putArr(COST, D.costing);
+  putObj(PENDMETA, D.pending_meta); putObj(SCORE, D.score); putObj(MKCOV, D.mk_cover);
+  putObj(UPMETA, D.up_meta);
+  E.forEach(e => { if (!e.source) e.source = 'SAMPLE'; });
+  BRANDS.length = 0;
+  [...new Set(R.map(x => x.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
+  renderAll();
+  sbStatus('동기화됨 ' + new Date().toLocaleTimeString().replace(/:\d+$/, ''), 'ok');
+}
+setInterval(async () => {
+  if (SYNC_DIRTY.size || SYNC_BUSY || document.hidden) return;
+  const ae = document.activeElement;                       /* 입력 중이면 건드리지 않음 */
+  if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?select=updated_at&order=updated_at.desc&limit=1', { headers: SB_H });
+    const [x] = await r.json();
+    if (x && x.updated_at > SYNC_TS) await sbRefresh();
+  } catch (e) {}
+}, 45000);
+
+sbStatus(SYNC_TS ? '동기화됨' : '오프라인 데이터', SYNC_TS ? 'ok' : 'err');
+
+
+</script>
+
+<script>
+(async function () {
+  const SB = 'https://tdjvglynvdjxvgbtskki.supabase.co', K = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkanZnbHludmRqeHZnYnRza2tpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MTQxMzcsImV4cCI6MjEwMDE5MDEzN30.p5nBDBHkwZ1fB7vkxLoMq-krox_GcuFt8wzTHS0TVDw';
+  const H = { apikey: K, Authorization: 'Bearer ' + K };
+  try {
+    const r = await fetch(SB + '/rest/v1/jsv_datasets?select=name,value,updated_at&name=neq.app_html', { headers: H });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json();
+    const D = {}, chunks = {};
+    let ts = '';
+    rows.forEach(x => {
+      if (x.updated_at > ts) ts = x.updated_at;
+      const m = x.name.match(/^(.+):(\d+)$/);
+      if (m) (chunks[m[1]] = chunks[m[1]] || [])[+m[2]] = x.value;
+      else D[x.name] = x.value;
+    });
+    for (const k in chunks) if (!(k in D)) D[k] = [].concat.apply([], chunks[k].filter(Boolean));
+    window.__DATA__ = { requests: D.requests || [], execs: D.execs || [], pending: D.pending || [],
+      costing: D.costing || [], pending_meta: D.pending_meta || {}, score: D.score || {},
+      mk_cover: D.mk_cover || {}, up_meta: D.up_meta || {} };
+    window.__SYNC_TS__ = ts;
+  } catch (e) {
+    document.body.insertAdjacentHTML('afterbegin',
+      '<div style="background:#fde3e3;color:#b3261e;padding:10px 16px;font-weight:700">서버 연결 실패 (' +
+      (e && e.message || e) + ') — 네트워크 확인 후 새로고침해 주세요.</div>');
+    window.__DATA__ = { requests: [], execs: [], pending: [], costing: [], pending_meta: {}, score: {}, mk_cover: {}, up_meta: {} };
+    window.__SYNC_TS__ = '';
+  }
+  const s = document.createElement('script');
+  s.text = document.getElementById('app-code').textContent;
+  document.body.appendChild(s);
+})();
+</script>
+</body></html>
