@@ -1583,7 +1583,11 @@ async function handleUpload(fileList) {
         parsed.some(s => /sample\s*q'?ty/i.test(s.name)) ||
         parsed.every(s => s.recs.every(r => ['TOUS', 'STANLEY', 'QUINCE'].includes(r.brand_full)));
       const numbered = parsed.filter(s => /\(\d+\)\s*$/.test(s.name)).length;
-      const versioned = parsed.length > 1 && (tuSn || (parsed.length > 3 && numbered >= parsed.length / 2));
+      /* 시트들이 전부 같은 브랜드면 = 주차별 지난 시트 복사본 → 마지막(최신) 시트만 사용.
+         브랜드가 서로 다르면(전체 브랜드 파일) 전부 사용. 숨김 시트는 읽기 단계에서 이미 제외됨 */
+      const bset = parsed.map(s => [...new Set(s.recs.map(r => r.brand_full))].sort().join(','));
+      const sameBrand = parsed.length > 1 && bset.every(x => x === bset[0]);
+      const versioned = parsed.length > 1 && (tuSn || sameBrand || (parsed.length > 3 && numbered >= parsed.length / 2));
       const use = versioned ? [parsed[parsed.length - 1]] : parsed;
       if (versioned) note = `시트 ${parsed.length}개 중 최신 시트(${use[0].name})만 사용`;
       use.forEach(s => recs.push(...s.recs));
@@ -1852,16 +1856,39 @@ async function handleDevUpload(fileList) {
       }
       let mkScanned = 0;
       if (!recs.length) {                       /* SAMPLE RECAP 양식이 아니면 마켓 샘플 차트로 해석 */
-        const brand = BRAND_FROM_NAME(file.name);
+        let brand = BRAND_FROM_NAME(file.name);
         const name = file.name.replace(/\.xlsx$/i, '');
-        const cov = new Set(MKCOV[brand] || []);
-        sheets.forEach(s => {
-          const got = marketSheetToRecords(s, brand, name);
-          mkScanned += got.scanned || 0;
-          (got.coverKeys || []).forEach(k => cov.add(k));
-          got.forEach(r => recs.push(r));
+        const parseAll = (b) => {
+          const out = []; let scanned = 0; const cov2 = new Set();
+          sheets.forEach(s => {
+            const got = marketSheetToRecords(s, b, name);
+            scanned += got.scanned || 0;
+            (got.coverKeys || []).forEach(k => cov2.add(k));
+            got.forEach(r => out.push(r));
+          });
+          return { out, scanned, cov2 };
+        };
+        let got1 = parseAll(brand);
+        /* 파일 이름이 아니라 내용(패턴/스타일 번호 접두어)으로 브랜드 확정 — 파일명이 바뀌어도 ETC로 안 빠짐 */
+        const vote = {};
+        got1.out.forEach(r => {
+          const s2 = String(r.pattern || r.style || '').toUpperCase().trim();
+          const hit2 = PFX.find(pp => s2.startsWith(pp[0]));
+          if (hit2) vote[hit2[1]] = (vote[hit2[1]] || 0) + 1;
         });
-        if (mkScanned) MKCOV[brand] = [...cov];
+        const win = Object.entries(vote).sort((a, b) => b[1] - a[1])[0];
+        if (win && win[1] >= got1.out.length / 2 && win[0] !== brand) {
+          brand = win[0];
+          got1 = parseAll(brand);
+        }
+        mkScanned = got1.scanned;
+        got1.out.forEach(r => recs.push(r));
+        if (mkScanned) {
+          const cov = new Set(MKCOV[brand] || []);
+          got1.cov2.forEach(k => cov.add(k));
+          MKCOV[brand] = [...cov];
+          delete MKCOV['ETC'];                  /* 과거 브랜드 인식 실패 잔재 정리 */
+        }
         src = 'MARKET';
         /* 전부 완료된 마켓 파일: 해당 브랜드 마켓 데이터 비우기 */
         if (!recs.length && mkScanned > 0) {
@@ -1878,7 +1905,8 @@ async function handleDevUpload(fileList) {
       if (src === 'MARKET') {
         const key = recs[0].brand;
         for (let i = E.length - 1; i >= 0; i--)
-          if (E[i].source === 'MARKET' && E[i].brand === key && E[i].src_name) E.splice(i, 1);
+          if (E[i].source === 'MARKET' && E[i].src_name &&
+              (E[i].brand === key || E[i].brand === 'ETC')) E.splice(i, 1);   /* ETC = 과거 인식 실패 잔재 함께 제거 */
       } else {
         /* SAMPLE RECAP 재업로드: 기존 사진 보존(브라우저가 못 읽는 EMF 스케치 등) 후 RECAP 유래 행 전체 교체 */
         const oldPh = {};
