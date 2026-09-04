@@ -1814,16 +1814,22 @@ const buyerCodes = e => {
 };
 const dupKeys = e => buyerCodes(e).map(c =>
   e.brand + '|' + c + '|' + String(e.color || '').toUpperCase().replace(/\s+/g, ' ').trim());
-/* 마켓 차트와 RECAP 양쪽에 있는 스타일은 차트 행만 남긴다 (차트 파일의 완료분 포함) */
+/* 마켓 수량은 차트 파일이 기준:
+   ① 차트 파일이 올라와 있는 브랜드 → RECAP에서 온 마켓 행은 전부 제외 (차트 행만 사용)
+   ② 차트가 없는 브랜드(예: 전량 완료된 파일) → 스타일 키가 겹치는 행만 제외 */
 function dedupeMarket() {
   const chart = new Set();
-  E.filter(e => e.src_name && e.source === 'MARKET').forEach(e => dupKeys(e).forEach(k => chart.add(k)));
+  const chartBrands = new Set();
+  E.filter(e => e.src_name && e.source === 'MARKET').forEach(e => {
+    chartBrands.add(e.brand);
+    dupKeys(e).forEach(k => chart.add(k));
+  });
   Object.values(MKCOV).forEach(list => (list || []).forEach(k => chart.add(k)));
   let removed = 0;
   for (let i = E.length - 1; i >= 0; i--) {
     const e = E[i];
     if (!e.src_name && e.source === 'MARKET') {
-      if (dupKeys(e).some(k => chart.has(k))) { E.splice(i, 1); removed++; }
+      if (chartBrands.has(e.brand) || dupKeys(e).some(k => chart.has(k))) { E.splice(i, 1); removed++; }
     }
   }
   return removed;
