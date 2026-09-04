@@ -237,6 +237,7 @@ td.editing.num{width:1%}
 </header>
 <main>
 <section class="panel on" id="p-sales">
+  <div class="upstrip" id="up-strip"></div>
   <div class="tiles" id="sales-tiles"></div>
   <div class="toolbar">
     <div class="chips" id="brand-chips" style="flex:1"></div>
@@ -261,7 +262,6 @@ td.editing.num{width:1%}
 </section>
 
 <section class="panel" id="p-dev">
-  <div class="upstrip" id="up-strip"></div>
   <div class="tiles" id="dev-tiles"></div>
   <div class="toolbar">
     <div class="chips" id="src-chips"></div>
@@ -337,7 +337,7 @@ const I18N = {
     e_prog: '진행', e_pat: 'PATTERN/담당',
     p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: '구분', p_style: 'STYLE',
     p_qty: '총수량', p_bal: '잔량', p_line: 'LINE', p_exp: '접수 예정일', p_deli: 'DEL', p_note: '비고',
-    up_strip: '영업 차트 업로드', up_click: '클릭하여 확인 처리', up_ack: '확인됨', up_new: '미확인 업로드',
+    up_strip: '영업 차트 업로드', up_click: '클릭하면 알림이 사라집니다 (개발실)', up_ack: '확인됨', up_new: '새 업로드 — 개발실 확인 대기', ws_late: '샘플 작지 전달일 경과 — 업데이트 필요',
     p_total: '미접수 합계', p_by_brand: '브랜드별 미접수', p_rows: '미접수 건수', p_brands: '브랜드 수',
     cost_brand: '브랜드', cost_all: '전체 브랜드', cost_open: '미완료', cost_late: '지연',
     cost_done: '완료', cost_total: '전체 건수',
@@ -376,7 +376,7 @@ const I18N = {
     e_prog: 'Progress', e_pat: 'PATTERN/Owner',
     p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: 'Type', p_style: 'STYLE',
     p_qty: 'Total qty', p_bal: 'Balance', p_line: 'LINE', p_exp: 'Expected date', p_deli: 'DEL', p_note: 'Note',
-    up_strip: 'Sales chart uploads', up_click: 'Click to acknowledge', up_ack: 'Confirmed', up_new: 'New upload',
+    up_strip: 'Sales chart uploads', up_click: 'Click to dismiss (sample room)', up_ack: 'Confirmed', up_new: 'New upload — awaiting sample room', ws_late: 'W/S pass date overdue — please update',
     p_total: 'Not received total', p_by_brand: 'By brand', p_rows: 'Not received rows', p_brands: 'Brands',
     cost_brand: 'Brand', cost_all: 'All brands', cost_open: 'Open', cost_late: 'Late',
     cost_done: 'Done', cost_total: 'Total',
@@ -415,7 +415,7 @@ const I18N = {
     e_prog: 'Tiến độ', e_pat: 'PATTERN/Phụ trách',
     p_buyer: 'BRAND', p_div: 'DIVISION', p_group: 'GROUP', p_gubun: 'Phân loại', p_style: 'STYLE',
     p_qty: 'Tổng SL', p_bal: 'Còn lại', p_line: 'CHUYỀN', p_exp: 'Ngày dự kiến nhận', p_deli: 'DEL', p_note: 'Ghi chú',
-    up_strip: 'Tải lên biểu đồ KD', up_click: 'Bấm để xác nhận', up_ack: 'Đã xác nhận', up_new: 'Chưa xác nhận',
+    up_strip: 'Tải lên biểu đồ KD', up_click: 'Bấm để xoá thông báo (phòng mẫu)', up_ack: 'Đã xác nhận', up_new: 'Tải lên mới — chờ phòng mẫu', ws_late: 'Quá hạn chuyển W/S — cần cập nhật',
     p_total: 'Tổng chưa tiếp nhận', p_by_brand: 'Theo thương hiệu', p_rows: 'Số dòng chưa tiếp nhận', p_brands: 'Số thương hiệu',
     cost_brand: 'Thương hiệu', cost_all: 'Tất cả', cost_open: 'Chưa xong', cost_late: 'Trễ',
     cost_done: 'Đã xong', cost_total: 'Tổng số',
@@ -861,7 +861,9 @@ el('btn-only-pending').onclick = () => { onlyPending = !onlyPending; drawSales()
 el('btn-only-cancel').onclick = () => { onlyCancelled = !onlyCancelled; drawSales(); };
 el('btn-show-done').onclick = () => { showDone = !showDone; drawChips(); drawSales(); };
 el('btn-add-row').onclick = () => {
-  const r = { id: 'N' + (++seq), brand: AB(curBrand), brand_full: curBrand, season: '', stage: '',
+  /* id는 PC 간 충돌이 없도록 시간+난수 기반 */
+  const r = { id: 'N' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    brand: AB(curBrand), brand_full: curBrand, season: '', stage: '',
     xf: '', hb: 0, slg: 0, ws_pass: '', mtrl_sched: '', status: '', remarks: '',
     received: false, done: false, cancelled: false, changes: {}, comment: '', isNew: true };
   R.unshift(r); drawChips(); drawSales(); dirty('requests');
@@ -878,8 +880,31 @@ function salesRows() {
   return rows;
 }
 
+/* 영업 차트 업로드 알림: 샘플 현황 차트 탭에 표시. 개발실 모드만 클릭 가능, 클릭하면 제거 */
+function salesTabLabel() {
+  const hasNew = Object.values(UPMETA).some(m => m && m.at);
+  el('tab-sales').innerHTML = esc(T('tab_sales')) +
+    (hasNew ? '<i class="reddot" style="margin-left:6px"></i>' : '');
+}
+function drawUpStrip() {
+  salesTabLabel();
+  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at).sort();
+  const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
+  el('up-strip').innerHTML = !ub.length ? '' :
+    `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
+    ub.map(b => `<button class="chip upchip new" data-ub="${esc(b)}"
+        title="${esc(ROLE === 'DEV' ? T('up_click') : T('up_new'))}">
+        ${esc(AB(b))}<span class="small muted"> ${lt(UPMETA[b].at)}</span><i class="reddot"></i></button>`).join('');
+  el('up-strip').onclick = ev => {
+    const btn = ev.target.closest('[data-ub]'); if (!btn) return;
+    if (ROLE !== 'DEV') return;                    /* 개발실만 확인(제거) 가능 */
+    delete UPMETA[btn.dataset.ub];
+    dirty('up_meta'); drawUpStrip();
+  };
+}
 function drawSales() {
   if (!BRANDS.includes(curBrand)) curBrand = BRANDS[0];
+  drawUpStrip();
   el('btn-only-pending').textContent = onlyPending ? T('b_all') : T('b_pending_only');
   el('btn-only-cancel').textContent = onlyCancelled ? T('b_all') : T('b_cancel_only');
   el('btn-show-done').textContent = showDone ? T('b_done_hide') : T('b_done');
@@ -921,7 +946,14 @@ function drawSales() {
     const t = r.changes[f] ? ` title="${esc(r.changes[f].from)}"` : '';
     /* 긴 텍스트 필드는 자동 높이 textarea — 글자 잘림 없이 전체 표시 */
     if (cls === 'long') {
-      return `<td class="editing longcell${red}"${t}>
+      /* 샘플 작지 전달일이 지났는데 완료 표시가 없으면 종 아이콘 (업데이트 재촉) */
+      let bell = '';
+      if (f === 'ws_pass' && !r.cancelled && !r.done) {
+        const d = lastDateOf(r[f]);
+        if (d && d < TODAY && !/완료|OK|DONE/i.test(String(r[f] || '')))
+          bell = `<span style="float:right" title="${esc(T('ws_late'))}">${BELL}</span>`;
+      }
+      return `<td class="editing longcell${red}"${t}>${bell}
         <textarea class="cellin ta" data-f="${f}" rows="1"
         ${can.edit() ? '' : 'readonly'}>${esc(r[f] || '')}</textarea></td>`;
     }
@@ -1063,7 +1095,13 @@ const activeDev = e => {
   if (e.balance_n === 0) return false;               /* 잔량 0 = 완료 */
   return true;
 };
-const stageOf = e => (isDate(e.sewing) && String(e.sewing).slice(0, 10) <= TODAY) ? 'SEW' : 'CUT';
+/* 조립: SEWING 날짜 경과 / 재단·기리메: CUT 또는 PAINTING 날짜 경과 / 그 외: 대기(아직 미진행) */
+const stageOf = e => {
+  if (isDate(e.sewing) && String(e.sewing).slice(0, 10) <= TODAY) return 'SEW';
+  if ((isDate(e.cut) && String(e.cut).slice(0, 10) <= TODAY) ||
+      (isDate(e.painting) && String(e.painting).slice(0, 10) <= TODAY)) return 'CUT';
+  return 'WAIT';
+};
 el('dev-search').oninput = e => { devQ = e.target.value.trim().toLowerCase(); drawDev(); };
 
 /* 브랜드 이름/약어를 그대로 검색하면 해당 브랜드만 필터 (스타일명 부분일치 혼입 방지) */
@@ -1081,31 +1119,10 @@ const hit = (e, q) => {
 };
 
 function drawDev() {
-  if (!['ALL', 'CUT', 'SEW'].includes(curStage)) curStage = 'ALL';
+  if (!['ALL', 'CUT', 'SEW', 'WAIT'].includes(curStage)) curStage = 'ALL';
   el('dev-search').placeholder = T('search_ph');
   el('btn-dev-upload').textContent = T('b_dev_upload');
   el('btn-dev-upload').title = T('up_hint_dev');
-
-  /* 영업 차트 업로드 알림: 브랜드별 최근 업로드 시각 + 미확인(빨간 점) 표시.
-     개발실 모드에서 클릭하면 확인 처리되어 전 인원에게 반영 */
-  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at).sort();
-  const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
-  el('up-strip').innerHTML = !ub.length ? '' :
-    `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
-    ub.map(b => {
-      const m = UPMETA[b];
-      const isNew = !m.ack;
-      const tip = m.ack ? `${T('up_ack')} ${lt(m.ack)}` : (ROLE === 'DEV' ? T('up_click') : T('up_new'));
-      return `<button class="chip upchip${isNew ? ' new' : ''}" data-ub="${esc(b)}" title="${esc(tip)}">
-        ${esc(AB(b))}<span class="small muted"> ${lt(m.at)}</span>${isNew ? '<i class="reddot"></i>' : '<span class="ackmark">✓</span>'}</button>`;
-    }).join('');
-  el('up-strip').onclick = ev => {
-    const btn = ev.target.closest('[data-ub]'); if (!btn) return;
-    const m = UPMETA[btn.dataset.ub];
-    if (ROLE !== 'DEV' || !m || m.ack) return;
-    m.ack = new Date().toISOString();
-    dirty('up_meta'); drawDev();
-  };
 
   const SRC = { ALL: T('s_all'), MARKET: T('s_market'), SAMPLE: T('s_sample'), PENDING: T('s_pending') };
   const qsum = list => list.reduce((s, e) => s + (e.qty_n || 0), 0);
@@ -1167,9 +1184,9 @@ function drawDev() {
     </div>`;
 
   /* 전체 보기에서는 '전체' 대신 '진행중'으로 표기 (전체 928 = 진행중 + 미접수) */
-  const SLB = { ALL: curSrc === 'ALL' ? T('st_inprog') : T('s_all'), CUT: T('st_cut'), SEW: T('st_sew') };
+  const SLB = { ALL: curSrc === 'ALL' ? T('st_inprog') : T('s_all'), CUT: T('st_cut'), SEW: T('st_sew'), WAIT: T('st_wait') };
   el('stage-chips').innerHTML = `<span style="align-self:center;font-weight:700;color:var(--ink2);margin-right:4px">${T('st_filter')}</span>` +
-    ['ALL', 'CUT', 'SEW'].map(k =>
+    ['ALL', 'CUT', 'SEW', 'WAIT'].map(k =>
       `<button class="chip" data-st="${k}" aria-pressed="${k === curStage}">${SLB[k]}
         <span class="small muted"> ${(k === 'ALL' ? scope : scope.filter(e => stageOf(e) === k))
           .reduce((s, e) => s + (e.qty_n || 0), 0).toLocaleString()}</span></button>`).join('') +
@@ -1197,9 +1214,10 @@ function drawDev() {
                 T('e_short'), T('e_deli'), T('e_prog'), T('e_pat')];
   el('t-dev').innerHTML = '<thead><tr>' + COLS.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
     rows.map(e => {
-      const isSew = stageOf(e) === 'SEW';
-      const stCls = e.shortage ? 'risk' : (isSew ? 'sew' : 'cut');
-      const label = isSew ? T('st_sew') : T('st_cut');
+      const st = stageOf(e);
+      const isSew = st === 'SEW';
+      const stCls = e.shortage ? 'risk' : (st === 'SEW' ? 'sew' : (st === 'CUT' ? 'cut' : 'wait'));
+      const label = st === 'SEW' ? T('st_sew') : (st === 'CUT' ? T('st_cut') : T('st_wait'));
       return `<tr>
         <td>${photoCell(e)}</td>
         <td>${esc(e.line)}</td>
@@ -1215,7 +1233,7 @@ function drawDev() {
         <td>${esc(e.deli)}</td>
         <td><span class="st ${stCls}">${label}</span>
           <div class="bar" style="margin-top:5px">
-            <i class="c" style="width:${isSew ? 50 : 25}%"></i>
+            <i class="c" style="width:${isSew ? 50 : (st === 'CUT' ? 25 : 0)}%"></i>
             <i class="s" style="width:${isSew ? 25 : 0}%"></i></div></td>
         <td>${esc(e.pattern_maker || e.pattern)}</td></tr>`;
     }).join('') + '</tbody>';
@@ -1225,9 +1243,9 @@ function drawDev() {
 /* ---------- 미접수 탭 (샘플 펜딩 노란색) ---------- */
 const BELL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="#d03b3b" style="vertical-align:-2px">' +
   '<path d="M12 22a2.3 2.3 0 0 0 2.3-2.3H9.7A2.3 2.3 0 0 0 12 22zm7-5.3v-1l-1.6-1.6v-4.4c0-3-1.6-5.4-4.4-6v-.6a1.4 1.4 0 1 0-2.8 0v.6c-2.8.6-4.4 3-4.4 6v4.4L4.2 15.7v1z"/></svg>';
-/* 접수 예정일에서 마지막 날짜 추출 ('8/14->8/18' → 8/18) */
-const expDue = p => {
-  const s = String(p.exp || '');
+/* 텍스트에서 마지막 날짜 추출 ('8/14->8/18' → 8/18, '2026-08-27' 등) */
+const lastDateOf = str => {
+  const s = String(str || '');
   let m = s.match(/\d{4}-\d{2}-\d{2}/g);
   if (m) return m[m.length - 1];
   m = s.match(/\d{1,2}\s*\/\s*\d{1,2}/g);
@@ -1237,6 +1255,7 @@ const expDue = p => {
   }
   return '';
 };
+const expDue = p => lastDateOf(p.exp);
 function drawPending() {
   const bq = brandQ(devQ);
   const rows = PEND.filter(p => !devQ || (bq ? p.brand === bq :
@@ -1456,7 +1475,7 @@ el('score-views').onclick = e => {
 function renderAll() {
   document.documentElement.lang = LANG;
   el('h-title').textContent = T('title');
-  el('tab-sales').textContent = T('tab_sales');
+  salesTabLabel();
   el('tab-dev').textContent = T('tab_dev');
   el('tab-cost').textContent = T('tab_cost');
   el('tab-score').textContent = T('tab_score');
@@ -1597,7 +1616,8 @@ async function handleUpload(fileList) {
           }
         } else {
           R.unshift(Object.assign({
-            id: 'U' + (++seq), orig: '', season_n: '', stage_n: '', done: false, cancelled: false,
+            id: 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            orig: '', season_n: '', stage_n: '', done: false, cancelled: false,
             changes: {}, comment: '', isNew: true
           }, rec));
           added++;
@@ -1610,7 +1630,7 @@ async function handleUpload(fileList) {
     if (brands.size) {
       const now = new Date().toISOString();
       brands.forEach(b => { UPMETA[b] = { at: now, ack: '' }; });
-      dirty('up_meta'); drawDev();
+      dirty('up_meta');
     }
     drawChips(); drawSales(); dirty('requests');
     box.innerHTML = `<b>✔ 반영 완료</b> — 파일 ${files}개 · 브랜드 ${[...brands].join(', ')} ·
@@ -1781,8 +1801,9 @@ const buyerCodes = e => {
   const set = new Set();
   for (const k of ['group', 'style', 'pattern']) {
     const s = String(e[k] || '').toUpperCase();
-    (s.match(/[A-Z]{2}\d{6}/g) || []).forEach(c => set.add(c));          /* 바이어 코드 (예: SV360072) */
-    (s.match(/[A-Z]{2,3}\d{3,5}-\d+\b/g) || []).forEach(c => set.add(c)); /* JS 패턴 코드 (예: ST6090-7) */
+    (s.match(/[A-Z]{2}\d{6}/g) || []).forEach(c => set.add(c));            /* 바이어 코드 (예: SV360072) */
+    (s.match(/[A-Z]{2,3}\d{3,5}[A-Z]?-\d+\b/g) || []).forEach(c => set.add(c)); /* JS 패턴 코드 (예: ST6090-7, CH168A-1) */
+    (s.match(/[A-Z]{1,3}\d{4,6}[A-Z]?\b/g) || []).forEach(c => set.add(c));     /* 스타일 번호 (예: P127867, U09770, CH8295) */
   }
   return [...set];
 };
@@ -1956,6 +1977,8 @@ function marketSheetToRecords(sheet, brand, srcName) {
     const g = k => { for (const j of (multi[k] || [])) { const v = (row[j] || '').trim(); if (v) return v; } return ''; };
     if (!(g('style') || g('pattern') || g('color'))) continue;
     if (/^total$/i.test(g('style'))) continue;
+    /* 노란색 행 = 미접수 (아직 접수 전) → 마켓 진행 수량에서 제외. 미접수 수량은 샘플 팬딩 파일이 기준 */
+    if (row.fills && Object.values(row.fills).some(YELLOW)) continue;
     scanned++;
     /* 이 차트 파일이 다루는 스타일 키(완료분 포함) — RECAP 중복 제거용 */
     dupKeys({ brand, group: g('group'), style: g('style'), pattern: g('pattern'), color: g('color') })
@@ -2224,6 +2247,28 @@ const SB_SETS = () => ({
   pending_meta: PENDMETA, score: SCORE, mk_cover: MKCOV, up_meta: UPMETA,
 });
 
+/* ---- 영업 차트(requests) 병합 저장 ----
+   여러 명이 동시에 수정할 때 서로의 변경을 덮어쓰지 않도록,
+   저장 직전에 서버 최신본을 받아 행 단위로 병합한다.
+   REQ_BASE = 마지막 동기화 시점의 행별 스냅샷 (내가 뭘 바꿨는지 판별용) */
+let REQ_BASE = {};
+function snapReq() { REQ_BASE = {}; R.forEach(r => { REQ_BASE[r.id] = JSON.stringify(r); }); }
+function mergeReq(server) {
+  const localBy = {}; R.forEach(r => { localBy[r.id] = r; });
+  const seen = new Set(); const out = [];
+  server.forEach(s => {
+    seen.add(s.id);
+    const l = localBy[s.id];
+    if (!l) { if (!(s.id in REQ_BASE)) out.push(s); return; }   /* 내가 삭제한 행이면 제외, 남의 신규면 유지 */
+    out.push(JSON.stringify(l) !== REQ_BASE[s.id] ? l : s);      /* 내가 고친 행은 내 것, 아니면 서버 것 */
+  });
+  R.forEach(l => {
+    if (seen.has(l.id)) return;
+    if (!(l.id in REQ_BASE)) out.unshift(l);                     /* 내 신규 행 */
+    else if (JSON.stringify(l) !== REQ_BASE[l.id]) out.push(l);  /* 남이 지웠지만 내가 고친 행은 보존 */
+  });
+  return out;
+}
 async function sbPush() {
   if (SYNC_BUSY) { SYNC_TIMER = setTimeout(sbPush, 1000); return; }
   const names = [...SYNC_DIRTY];
@@ -2231,6 +2276,16 @@ async function sbPush() {
   SYNC_DIRTY.clear(); SYNC_BUSY = true;
   sbStatus('저장 중…', 'busy');
   try {
+    if (names.includes('requests')) {
+      try {
+        const rr = await fetch(SB_URL + '/rest/v1/jsv_datasets?name=eq.requests&select=value', { headers: SB_H });
+        if (rr.ok) {
+          const [row] = await rr.json();
+          const merged = mergeReq((row && row.value) || []);
+          R.length = 0; merged.forEach(x => R.push(x));
+        }
+      } catch (e) {}
+    }
     const all = SB_SETS();
     const rows = names.map(n => ({ name: n, value: all[n], updated_by: ROLE, updated_at: new Date().toISOString() }));
     const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?on_conflict=name', {
@@ -2241,6 +2296,7 @@ async function sbPush() {
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     (await r.json()).forEach(x => { if (x.updated_at > SYNC_TS) SYNC_TS = x.updated_at; });
+    if (names.includes('requests')) snapReq();   /* 병합 결과를 새 기준 스냅샷으로 */
     if (names.includes('execs'))   /* 시딩용 분할 행 정리 */
       fetch(SB_URL + '/rest/v1/jsv_datasets?name=like.execs:*', { method: 'DELETE', headers: SB_H }).catch(() => {});
     sbStatus('저장됨 ' + new Date().toLocaleTimeString().replace(/:\d+$/, ''), 'ok');
@@ -2283,6 +2339,7 @@ async function sbRefresh() {
   putObj(PENDMETA, D.pending_meta); putObj(SCORE, D.score); putObj(MKCOV, D.mk_cover);
   putObj(UPMETA, D.up_meta);
   E.forEach(e => { if (!e.source) e.source = 'SAMPLE'; });
+  snapReq();
   BRANDS.length = 0;
   [...new Set(R.map(x => x.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
   renderAll();
@@ -2299,6 +2356,7 @@ setInterval(async () => {
   } catch (e) {}
 }, 45000);
 
+snapReq();   /* 초기 로드 스냅샷 */
 sbStatus(SYNC_TS ? '동기화됨' : '오프라인 데이터', SYNC_TS ? 'ok' : 'err');
 
 
