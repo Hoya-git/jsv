@@ -136,6 +136,9 @@ input[type=checkbox]{accent-color:var(--s1);width:16px;height:16px;cursor:pointe
 .cellin:hover{border-color:var(--grid)}
 .cellin:focus{outline:none;border-color:var(--s1);background:#fff}
 .cellin.num{text-align:right;width:64px}
+.cellin.ta{resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;
+  min-width:150px;line-height:1.4;display:block;font:inherit;font-size:13.5px}
+td.longcell{min-width:160px}
 td.editing.num{width:1%}
 .topbar{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2)}
 .topbar select{font:inherit;font-size:13px;font-weight:700;padding:5px 9px;border-radius:7px;
@@ -514,9 +517,13 @@ ${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i+1}.xml" Cont
     add('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+    /* 인쇄 영역: s.printCol('K' 등)이 있으면 A1부터 해당 열×전체 행까지 */
+    const defNames = sheets.map((s, i) => s.printCol
+      ? `<definedName name="_xlnm.Print_Area" localSheetId="${i}">'${esc(s.name).slice(0,31)}'!$A$1:$${s.printCol}$${s.rows.length}</definedName>`
+      : '').join('');
     add('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets>${sheets.map((s, i) => `<sheet name="${esc(s.name).slice(0,31)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`);
+<sheets>${sheets.map((s, i) => `<sheet name="${esc(s.name).slice(0,31)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets>${defNames ? `<definedNames>${defNames}</definedNames>` : ''}</workbook>`);
     add('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 ${sheets.map((_, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}
@@ -534,8 +541,14 @@ ${sheets.map((_, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxm
         const ht = (ri >= (s.headRows || 0) && s.rowHeight) ? ` ht="${s.rowHeight}" customHeight="1"` : '';
         return `<row r="${ri+1}"${ht}>${cells}</row>`;
       }).join('');
+      /* 가로 인쇄 + 폭 맞춤 (printCol 지정 시) */
+      const pr = s.printCol ? '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' : '';
+      const ps = s.printCol
+        ? '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
+          '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
+        : '';
       add(`xl/worksheets/sheet${i+1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${rows}</sheetData></worksheet>`);
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${pr}${cols}<sheetData>${rows}</sheetData>${ps}</worksheet>`);
     });
     return zip(f);
   }
@@ -848,7 +861,7 @@ el('btn-only-pending').onclick = () => { onlyPending = !onlyPending; drawSales()
 el('btn-only-cancel').onclick = () => { onlyCancelled = !onlyCancelled; drawSales(); };
 el('btn-show-done').onclick = () => { showDone = !showDone; drawChips(); drawSales(); };
 el('btn-add-row').onclick = () => {
-  const r = { id: 'N' + (++seq), brand: curBrand, brand_full: curBrand, season: '', stage: '',
+  const r = { id: 'N' + (++seq), brand: AB(curBrand), brand_full: curBrand, season: '', stage: '',
     xf: '', hb: 0, slg: 0, ws_pass: '', mtrl_sched: '', status: '', remarks: '',
     received: false, done: false, cancelled: false, changes: {}, comment: '', isNew: true };
   R.unshift(r); drawChips(); drawSales(); dirty('requests');
@@ -856,6 +869,8 @@ el('btn-add-row').onclick = () => {
   if (tr) tr.querySelector('.cellin').focus();
 };
 
+/* 직접 수정 시 변경 추적 대상 필드 */
+const TRACKF = ['season', 'stage', 'xf', 'hb', 'slg', 'ws_pass', 'mtrl_sched', 'status'];
 function salesRows() {
   let rows = ofBrand(curBrand).filter(visible);
   if (onlyPending) rows = rows.filter(r => !r.received);
@@ -904,6 +919,12 @@ function drawSales() {
   const F = (r, f, cls) => {
     const red = r.changes[f] ? ' chg' : '';
     const t = r.changes[f] ? ` title="${esc(r.changes[f].from)}"` : '';
+    /* 긴 텍스트 필드는 자동 높이 textarea — 글자 잘림 없이 전체 표시 */
+    if (cls === 'long') {
+      return `<td class="editing longcell${red}"${t}>
+        <textarea class="cellin ta" data-f="${f}" rows="1"
+        ${can.edit() ? '' : 'readonly'}>${esc(r[f] || '')}</textarea></td>`;
+    }
     return `<td class="editing${cls === 'num' ? ' num' : ''}${red}"${t}>
       <input class="cellin ${cls || ''}" data-f="${f}" value="${esc(r[f] === 0 ? '' : r[f])}"
       ${can.edit() ? '' : 'readonly'}></td>`;
@@ -918,9 +939,9 @@ function drawSales() {
       const auto = changeText(r);
       const cls = r.cancelled ? 'cancelled' : (r.received ? 'recv' : 'pending');
       return `<tr class="${cls}" data-id="${r.id}">
-        <td>${esc(r.brand)}</td>
-        ${F(r, 'season')}${F(r, 'stage')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
-        ${F(r, 'ws_pass')}${F(r, 'mtrl_sched')}${F(r, 'status')}
+        <td>${esc(AB(r.brand))}</td>
+        ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
+        ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
         <td class="wrap">${auto ? `<span class="auto">▲ ${esc(auto)}</span>` : ''}
           <input class="cmt" data-f="comment" placeholder="${esc(r.remarks) || ''}" value="${esc(r.comment)}"></td>
         <td style="text-align:center"><input type="checkbox" data-k="received" ${r.received ? 'checked' : ''}></td>
@@ -944,10 +965,24 @@ function drawSales() {
         drawChips(); drawSales(); dirty('requests');
       };
     });
-    tr.querySelectorAll('.cellin, .cmt').forEach(inp => inp.onchange = ev => {
-      const f = inp.dataset.f, v = ev.target.value;
-      r[f] = (f === 'hb' || f === 'slg') ? (parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) : v;
-      drawSales(); dirty('requests');
+    tr.querySelectorAll('.cellin, .cmt').forEach(inp => {
+      inp.onchange = ev => {
+        const f = inp.dataset.f, v = ev.target.value;
+        const nv = (f === 'hb' || f === 'slg') ? (parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) : v;
+        /* 직접 수정도 업로드와 동일하게 변경 추적 → 빨간 글씨 + 이전 값 툴팁 + Remark 자동 기입 */
+        if (TRACKF.includes(f)) {
+          const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
+          const a = norm(r[f] === 0 ? '' : r[f]), b2 = norm(nv === 0 ? '' : nv);
+          if (a !== b2) r.changes = Object.assign({}, r.changes, { [f]: { from: a || '(없음)', to: b2 } });
+        }
+        r[f] = nv;
+        drawSales(); dirty('requests');
+      };
+      /* textarea 자동 높이 */
+      if (inp.classList.contains('ta')) {
+        const grow = () => { inp.style.height = 'auto'; inp.style.height = (inp.scrollHeight + 2) + 'px'; };
+        inp.oninput = grow; grow();
+      }
     });
     const cbt = tr.querySelector('.rowcancel');
     if (cbt) cbt.onclick = () => {
@@ -995,14 +1030,15 @@ function sheetFor(brand) {
     const auto = changeText(r);
     const remark = [r.cancelled ? '[CANCEL]' : '', auto ? '[CHG] ' + auto : '',
                     r.comment || r.remarks || ''].filter(Boolean).join(' / ');
-    rows.push([null, { v: r.brand, s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
+    rows.push([null, { v: AB(r.brand), s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
       { v: r.xf, s: sty('xf') }, { v: r.hb || '', s: sty('hb') }, { v: r.slg || '', s: sty('slg') },
       { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: base },
       { v: r.status || '', s: base }, { v: remark, s: auto ? red : base }]);
   }
   rows.push([null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
              { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }]);
-  return { name: brand, cols: XW_W, rows, rowHeight: 29.25, headRows: 2 };
+  /* printCol: 'K'(Remark)까지 인쇄 영역 + 가로 인쇄 */
+  return { name: brand, cols: XW_W, rows, rowHeight: 29.25, headRows: 2, printCol: 'K' };
 }
 function saveXlsx(sheets, name) {
   const url = URL.createObjectURL(new Blob([XW.build(sheets)],
