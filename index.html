@@ -968,14 +968,15 @@ function drawSales() {
     '<thead><tr>' + COLS.map(c => `<th class="${['HB','SLG'].includes(c) ? 'num' : ''}">${c}</th>`).join('') +
     '</tr></thead><tbody>' +
     rows.map(r => {
-      const auto = changeText(r);
       const cls = r.cancelled ? 'cancelled' : (r.received ? 'recv' : 'pending');
+      /* Remark는 자동 생성 없이 사용자가 직접 쓰는 칸 — 변경 내역은 빨간 셀 + 툴팁으로만 표시 */
+      const rmk = r.comment !== '' && r.comment != null ? r.comment : (r.remarks || '');
       return `<tr class="${cls}" data-id="${r.id}">
         <td>${esc(AB(r.brand))}</td>
         ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
         ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
-        <td class="wrap">${auto ? `<span class="auto">▲ ${esc(auto)}</span>` : ''}
-          <input class="cmt" data-f="comment" placeholder="${esc(r.remarks) || ''}" value="${esc(r.comment)}"></td>
+        <td class="longcell"><textarea class="cellin ta cmt" data-f="comment" rows="1"
+          ${can.edit() ? '' : 'readonly'}>${esc(rmk)}</textarea></td>
         <td style="text-align:center"><input type="checkbox" data-k="received" ${r.received ? 'checked' : ''}></td>
         <td style="text-align:center"><input type="checkbox" data-k="done" ${r.done ? 'checked' : ''}></td>
         <td style="text-align:center">${can.cancel()
@@ -1059,13 +1060,13 @@ function sheetFor(brand) {
     const base = r.cancelled ? 7 : (r.received ? 9 : 3);
     const red  = r.cancelled ? 8 : (r.received ? 10 : 5);
     const sty = f => (r.changes[f] ? red : base);
+    /* Remark는 사용자가 쓴 내용 그대로 — 변경 내역 자동 문구는 넣지 않음 (변경 셀은 빨간 글씨로 표시) */
     const auto = changeText(r);
-    const remark = [r.cancelled ? '[CANCEL]' : '', auto ? '[CHG] ' + auto : '',
-                    r.comment || r.remarks || ''].filter(Boolean).join(' / ');
+    const remark = [r.cancelled ? '[CANCEL]' : '', r.comment || r.remarks || ''].filter(Boolean).join(' / ');
     rows.push([null, { v: AB(r.brand), s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
       { v: r.xf, s: sty('xf') }, { v: r.hb || '', s: sty('hb') }, { v: r.slg || '', s: sty('slg') },
       { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: base },
-      { v: r.status || '', s: base }, { v: remark, s: auto ? red : base }]);
+      { v: r.status || '', s: base }, { v: remark, s: base }]);
   }
   rows.push([null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
              { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }]);
@@ -2295,7 +2296,15 @@ const SB_SETS = () => ({
    저장 직전에 서버 최신본을 받아 행 단위로 병합한다.
    REQ_BASE = 마지막 동기화 시점의 행별 스냅샷 (내가 뭘 바꿨는지 판별용) */
 let REQ_BASE = {};
-function snapReq() { REQ_BASE = {}; R.forEach(r => { REQ_BASE[r.id] = JSON.stringify(r); }); }
+/* 과거 버전이 만든 중복 id(U1, N1 등)를 고유하게 교정 — 배열 순서 기준 결정적이라 모든 PC에서 동일 결과 */
+function fixDupIds() {
+  const cnt = {};
+  R.forEach(r => {
+    const n = cnt[r.id] = (cnt[r.id] || 0) + 1;
+    if (n > 1) r.id = r.id + '~' + n;
+  });
+}
+function snapReq() { fixDupIds(); REQ_BASE = {}; R.forEach(r => { REQ_BASE[r.id] = JSON.stringify(r); }); }
 function mergeReq(server) {
   const localBy = {}; R.forEach(r => { localBy[r.id] = r; });
   const seen = new Set(); const out = [];
@@ -2324,8 +2333,16 @@ async function sbPush() {
         const rr = await fetch(SB_URL + '/rest/v1/jsv_datasets?name=eq.requests&select=value', { headers: SB_H });
         if (rr.ok) {
           const [row] = await rr.json();
-          const merged = mergeReq((row && row.value) || []);
+          const server = (row && row.value) || [];
+          /* 서버 배열에도 중복 id가 있으면 같은 규칙으로 교정 후 병합 */
+          const scnt = {};
+          server.forEach(r => {
+            const n = scnt[r.id] = (scnt[r.id] || 0) + 1;
+            if (n > 1) r.id = r.id + '~' + n;
+          });
+          const merged = mergeReq(server);
           R.length = 0; merged.forEach(x => R.push(x));
+          fixDupIds();
         }
       } catch (e) {}
     }
@@ -2399,7 +2416,8 @@ setInterval(async () => {
   } catch (e) {}
 }, 45000);
 
-snapReq();   /* 초기 로드 스냅샷 */
+snapReq();   /* 초기 로드 스냅샷 (중복 id 교정 포함) */
+renderAll(); /* 교정된 id로 화면 다시 그리기 */
 sbStatus(SYNC_TS ? '동기화됨' : '오프라인 데이터', SYNC_TS ? 'ok' : 'err');
 
 
