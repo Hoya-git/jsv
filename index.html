@@ -1596,6 +1596,8 @@ async function handleUpload(fileList) {
       files++;
 
       const seen = new Set();
+      const orderIds = [];                       /* 파일 행 순서 기록 */
+      const CXKW = /캔슬|cancel/i;               /* Remark의 캔슬 키워드 → 취소 처리 */
       for (const rec of recs) {
         brands.add(rec.brand_full);
         const k = keyOf(rec);
@@ -1615,18 +1617,26 @@ async function handleUpload(fileList) {
             if (b !== '' && a !== b) { ch[f] = { from: a || '(없음)', to: b }; cur[f] = rec[f]; }
           }
           if (rec.remarks) cur.remarks = rec.remarks;
+          /* Remark에 캔슬/cancel 이 쓰여 있으면 취소 처리 (빨간 하이라이트 + 개발실 최종 삭제 대상) */
+          const kw = CXKW.test(rec.remarks || '');
+          if (kw && !cur.cancelled) { cur.cancelled = true; cur.cxByRemark = true; cur.received = false; }
+          else if (!kw && cur.cxByRemark) { cur.cancelled = false; cur.cxByRemark = false; }
           if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
+          orderIds.push(cur.id);
           if (Object.keys(ch).length) {
             cur.changes = Object.assign({}, cur.changes, ch);
             changedCells += Object.keys(ch).length; updated++;
           }
         } else {
           const nid = 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+          const kw = CXKW.test(rec.remarks || '');
           R.unshift(Object.assign({
-            id: nid, orig: '', season_n: '', stage_n: '', done: false, cancelled: false,
+            id: nid, orig: '', season_n: '', stage_n: '', done: false,
+            cancelled: kw, cxByRemark: kw || undefined,
             changes: {}, comment: '', isNew: true
-          }, rec));
+          }, rec, kw ? { received: false } : {}));
           seen.add(nid);
+          orderIds.push(nid);
           added++;
         }
       }
@@ -1636,6 +1646,15 @@ async function handleUpload(fileList) {
         const x = R[i];
         if (fileBrands.has(x.brand_full) && !seen.has(x.id) && !x.cancelled) { R.splice(i, 1); removed++; }
       }
+      /* 표시 순서 = 파일 행 순서. (파일에 없는 취소 유지분은 해당 브랜드 뒤에) */
+      const pos = new Map(orderIds.map((id, i) => [id, i]));
+      const fileRows = R.filter(x => pos.has(x.id)).sort((a, b2) => pos.get(a.id) - pos.get(b2.id));
+      const extras = R.filter(x => fileBrands.has(x.brand_full) && !pos.has(x.id));
+      const others = R.filter(x => !fileBrands.has(x.brand_full));
+      R.length = 0;
+      fileRows.forEach(x => R.push(x));
+      extras.forEach(x => R.push(x));
+      others.forEach(x => R.push(x));
     }
     BRANDS.length = 0;
     [...new Set(R.map(r => r.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
@@ -1647,7 +1666,7 @@ async function handleUpload(fileList) {
     }
     drawChips(); drawSales(); dirty('requests');
     box.innerHTML = `<b>✔ 반영 완료</b> — 파일 ${files}개 · 브랜드 ${[...brands].join(', ')} ·
-      신규 <b>${added}</b>행 추가, <b>${updated}</b>행 갱신${removed ? `, 파일에 없는 <b>${removed}</b>행 정리` : ''} (변경 셀 ${changedCells}개는 빨간 글씨 + Remark 자동 기입)
+      신규 <b>${added}</b>행 추가, <b>${updated}</b>행 갱신${removed ? `, 파일에 없는 <b>${removed}</b>행 정리` : ''} (변경 셀 ${changedCells}개는 빨간 글씨로 표시)
       ${note ? '<br><span class="muted">' + esc(note) + '</span>' : ''}
       ${xlsWarn ? '<br><span style="color:var(--critical)">샘플 펜딩 파일(.xls)은 .xlsx로 저장해서 올려주세요.</span>' : ''}`;
   } catch (e) {
@@ -2319,6 +2338,9 @@ function mergeReq(server) {
     if (!(l.id in REQ_BASE)) out.unshift(l);                     /* 내 신규 행 */
     else if (JSON.stringify(l) !== REQ_BASE[l.id]) out.push(l);  /* 남이 지웠지만 내가 고친 행은 보존 */
   });
+  /* 순서는 로컬(내 화면) 기준 — 업로드가 파일 행 순서로 정렬해 두므로 그 순서를 유지 */
+  const opos = new Map(R.map((r, i) => [r.id, i]));
+  out.sort((a, b) => (opos.has(a.id) ? opos.get(a.id) : 1e9) - (opos.has(b.id) ? opos.get(b.id) : 1e9));
   return out;
 }
 async function sbPush() {
