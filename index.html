@@ -255,6 +255,7 @@ td.editing.num{width:1%}
     <div class="cardhead">
       <h2 id="sales-title">Sample Plan</h2>
       <button class="btn ghost sm sales-only" id="btn-add-row"></button>
+      <span class="small muted" id="sales-upd" style="white-space:nowrap"></span>
     </div>
     <div class="tw"><table id="t-sales"></table></div>
   </div>
@@ -866,7 +867,7 @@ el('btn-add-row').onclick = () => {
     brand: AB(curBrand), brand_full: curBrand, season: '', stage: '',
     xf: '', hb: 0, slg: 0, ws_pass: '', mtrl_sched: '', status: '', remarks: '',
     received: false, done: false, cancelled: false, changes: {}, comment: '', isNew: true };
-  R.unshift(r); drawChips(); drawSales(); dirty('requests');
+  R.unshift(r); touchBrand(r); drawChips(); drawSales(); dirty('requests');
   const tr = el('t-sales').querySelector(`tr[data-id="${r.id}"]`);
   if (tr) tr.querySelector('.cellin').focus();
 };
@@ -880,15 +881,29 @@ function salesRows() {
   return rows;
 }
 
-/* 영업 차트 업로드 알림: 샘플 현황 차트 탭에 표시. 개발실 모드만 클릭 가능, 클릭하면 제거 */
+/* 영업 차트 업로드 알림: 샘플 현황 차트 탭에 표시. 개발실 모드만 클릭 가능, 클릭하면 사라짐.
+   (기록 자체는 남겨서 브랜드별 last updated 표시에 사용) */
 function salesTabLabel() {
-  const hasNew = Object.values(UPMETA).some(m => m && m.at);
+  const hasNew = Object.values(UPMETA).some(m => m && m.at && !m.ack);
   el('tab-sales').innerHTML = esc(T('tab_sales')) +
     (hasNew ? '<i class="reddot" style="margin-left:6px"></i>' : '');
 }
+/* 화면에서 직접 수정 시 해당 브랜드의 마지막 업데이트 시각 기록 */
+function touchBrand(r) {
+  const m = UPMETA[r.brand_full] = UPMETA[r.brand_full] || {};
+  m.ed = new Date().toISOString();
+  dirty('up_meta');
+}
+/* 브랜드의 마지막 업데이트(업로드 또는 직접 수정) 시각 */
+function lastUpdOf(b) {
+  const m = UPMETA[b] || {};
+  const t = [m.at, m.ed].filter(Boolean).sort().pop();
+  if (!t) return '';
+  try { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); } catch (e) { return ''; }
+}
 function drawUpStrip() {
   salesTabLabel();
-  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at).sort();
+  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at && !UPMETA[b].ack).sort();
   const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
   el('up-strip').innerHTML = !ub.length ? '' :
     `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
@@ -898,7 +913,7 @@ function drawUpStrip() {
   el('up-strip').onclick = ev => {
     const btn = ev.target.closest('[data-ub]'); if (!btn) return;
     if (ROLE !== 'DEV') return;                    /* 개발실만 확인(제거) 가능 */
-    delete UPMETA[btn.dataset.ub];
+    UPMETA[btn.dataset.ub].ack = new Date().toISOString();
     dirty('up_meta'); drawUpStrip();
   };
 }
@@ -924,6 +939,8 @@ function drawSales() {
 
   el('stamp').textContent = TODAY;
   el('sales-title').textContent = AB(curBrand) + ' — Sample Plan (' + rows.length + ')';
+  const lu = lastUpdOf(curBrand);
+  el('sales-upd').textContent = lu ? 'last updated ' + lu : '';
 
   el('sales-tiles').innerHTML =
     tile(T('t_total_req'), allRows.length, BRANDS.length + T('t_brands'), 'blue') +
@@ -995,6 +1012,7 @@ function drawSales() {
       if (!can.edit()) { cb.disabled = true; return; }
       cb.onchange = ev => {
         r[cb.dataset.k] = ev.target.checked;
+        touchBrand(r);
         drawChips(); drawSales(); dirty('requests');
       };
     });
@@ -1009,6 +1027,8 @@ function drawSales() {
           if (a !== b2) r.changes = Object.assign({}, r.changes, { [f]: { from: a || '(없음)', to: b2 } });
         }
         r[f] = nv;
+        if (f === 'comment') r.remarks = nv;   /* Remark는 하나의 값으로 통일 — 지우면 지워진 채 유지 */
+        touchBrand(r);
         drawSales(); dirty('requests');
       };
       /* textarea 자동 높이 */
@@ -1024,6 +1044,7 @@ function drawSales() {
         r.received = false;
         if (!(r.comment || '').includes('[취소')) r.comment = ('[취소 ' + TODAY + '] ' + (r.comment || '')).trim();
       } else r.comment = (r.comment || '').replace(/\[취소 \d{4}-\d{2}-\d{2}\]\s*/, '');
+      touchBrand(r);
       drawChips(); drawSales(); dirty('requests');
     };
     const dbt = tr.querySelector('.rowdel');
@@ -1032,6 +1053,7 @@ function drawSales() {
       if (!confirm(`${r.brand_full} / ${r.season} / ${r.stage}`)) return;
       const i = R.findIndex(x => x.id === r.id);
       if (i >= 0) R.splice(i, 1);
+      touchBrand(r);
       drawChips(); drawSales(); dirty('requests');
     };
   });
@@ -1616,7 +1638,9 @@ async function handleUpload(fileList) {
             const a = norm(cur[f]), b = norm(rec[f]);
             if (b !== '' && a !== b) { ch[f] = { from: a || '(없음)', to: b }; cur[f] = rec[f]; }
           }
-          if (rec.remarks) cur.remarks = rec.remarks;
+          /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐 */
+          cur.remarks = rec.remarks || '';
+          cur.comment = rec.remarks || '';
           /* Remark에 캔슬/cancel 이 쓰여 있으면 취소 처리 (빨간 하이라이트 + 개발실 최종 삭제 대상) */
           const kw = CXKW.test(rec.remarks || '');
           if (kw && !cur.cancelled) { cur.cancelled = true; cur.cxByRemark = true; cur.received = false; }
@@ -1633,7 +1657,7 @@ async function handleUpload(fileList) {
           R.unshift(Object.assign({
             id: nid, orig: '', season_n: '', stage_n: '', done: false,
             cancelled: kw, cxByRemark: kw || undefined,
-            changes: {}, comment: '', isNew: true
+            changes: {}, comment: rec.remarks || '', isNew: true
           }, rec, kw ? { received: false } : {}));
           seen.add(nid);
           orderIds.push(nid);
