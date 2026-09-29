@@ -255,6 +255,7 @@ td.editing.num{width:1%}
     <div class="cardhead">
       <h2 id="sales-title">Sample Plan</h2>
       <button class="btn ghost sm sales-only" id="btn-add-row"></button>
+      <button class="btn ghost sm admin-only" id="btn-clr-chg"></button>
       <span class="small muted" id="sales-upd" style="white-space:nowrap"></span>
     </div>
     <div class="tw"><table id="t-sales"></table></div>
@@ -322,6 +323,7 @@ const I18N = {
     b_pending_only: '미접수만 보기', b_all: '전체 보기', b_cancel_only: '취소 건만 보기',
     b_done: '완료 건 보기', b_done_hide: '완료 건 숨기기', b_upload: '엑셀 업로드',
     b_xls_one: '엑셀 (이 브랜드)', b_xls_all: '엑셀 (전체 브랜드)', b_addrow: '+ 행 추가',
+    b_clrchg: '✓ 변경 표시 지우기', clr_confirm: '이 브랜드의 빨간 변경 표시를 모두 지울까요? (확인 완료 처리)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: '샘플 작지 전달일', c_mtrl: '자재스케줄', c_status: '현황', c_remark: 'Remarks',
     c_recv: '접수', c_done: '완료', c_cancel: '취소', c_del: '최종 삭제', c_cancelled: '취소됨',
@@ -361,6 +363,7 @@ const I18N = {
     b_pending_only: 'Not received only', b_all: 'Show all', b_cancel_only: 'Cancelled only',
     b_done: 'Show finished', b_done_hide: 'Hide finished', b_upload: 'Upload Excel',
     b_xls_one: 'Excel (this brand)', b_xls_all: 'Excel (all brands)', b_addrow: '+ Add row',
+    b_clrchg: '✓ Clear change marks', clr_confirm: 'Clear all red change marks for this brand? (mark as reviewed)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'W/S pass date', c_mtrl: 'Material sched.', c_status: 'Status', c_remark: 'Remarks',
     c_recv: 'Received', c_done: 'Done', c_cancel: 'Cancel', c_del: 'Delete', c_cancelled: 'Cancelled',
@@ -400,6 +403,7 @@ const I18N = {
     b_pending_only: 'Chỉ chưa tiếp nhận', b_all: 'Xem tất cả', b_cancel_only: 'Chỉ dòng huỷ',
     b_done: 'Xem đã xong', b_done_hide: 'Ẩn đã xong', b_upload: 'Tải file Excel',
     b_xls_one: 'Excel (thương hiệu này)', b_xls_all: 'Excel (tất cả)', b_addrow: '+ Thêm dòng',
+    b_clrchg: '✓ Xóa đánh dấu thay đổi', clr_confirm: 'Xóa tất cả đánh dấu đỏ của thương hiệu này? (đã kiểm tra xong)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'Ngày giao W/S', c_mtrl: 'Lịch nguyên liệu', c_status: 'Tình trạng', c_remark: 'Ghi chú',
     c_recv: 'Tiếp nhận', c_done: 'Xong', c_cancel: 'Huỷ', c_del: 'Xoá', c_cancelled: 'Đã huỷ',
@@ -432,6 +436,7 @@ let LANG = 'ko';
 const T = k => (I18N[LANG][k] !== undefined ? I18N[LANG][k] : (I18N.ko[k] || k));
 
 /* ---- 최소 XLSX 라이터 (외부 라이브러리 없음 · 오프라인 동작) ---- */
+
 const XW = (() => {
   const CRC = (() => { const t = new Uint32Array(256);
     for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
@@ -557,6 +562,7 @@ ${sheets.map((_, i) => `<Relationship Id="rId${i+1}" Type="http://schemas.openxm
 })();
 
 /* ---- 최소 XLSX 리더 (브라우저 내장 DecompressionStream 사용) ---- */
+
 const XR = (() => {
   const dec = new TextDecoder();
 
@@ -872,6 +878,16 @@ el('btn-add-row').onclick = () => {
   if (tr) tr.querySelector('.cellin').focus();
 };
 
+/* 개발실 확인 완료 → 현재 브랜드의 빨간 변경 표시 일괄 지우기 */
+el('btn-clr-chg').onclick = () => {
+  if (ROLE !== 'DEV') return;
+  const marked = ofBrand(curBrand).filter(r => Object.keys(r.changes || {}).length);
+  if (!marked.length) return;
+  if (!confirm(T('clr_confirm'))) return;
+  marked.forEach(r => { r.changes = {}; });
+  drawSales(); dirty('requests');
+};
+
 /* 직접 수정 시 변경 추적 대상 필드 */
 const TRACKF = ['season', 'stage', 'xf', 'hb', 'slg', 'ws_pass', 'mtrl_sched', 'status'];
 function salesRows() {
@@ -927,6 +943,7 @@ function drawSales() {
   el('btn-xlsx-one').textContent = T('b_xls_one');
   el('btn-xlsx-all').textContent = T('b_xls_all');
   el('btn-add-row').textContent = T('b_addrow');
+  el('btn-clr-chg').textContent = T('b_clrchg');
 
   const rows = salesRows();
   const all = ofBrand(curBrand).filter(visible);
@@ -992,7 +1009,8 @@ function drawSales() {
         <td>${esc(AB(r.brand))}</td>
         ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
         ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
-        <td class="longcell"><textarea class="cellin ta cmt" data-f="comment" rows="1"
+        <td class="longcell${r.changes.comment ? ' chg' : ''}"${r.changes.comment
+          ? ` title="${esc(r.changes.comment.from)}"` : ''}><textarea class="cellin ta cmt" data-f="comment" rows="1"
           ${can.edit() ? '' : 'readonly'}>${esc(rmk)}</textarea></td>
         <td style="text-align:center"><input type="checkbox" data-k="received" ${r.received ? 'checked' : ''}></td>
         <td style="text-align:center"><input type="checkbox" data-k="done" ${r.done ? 'checked' : ''}></td>
@@ -1020,11 +1038,24 @@ function drawSales() {
       inp.onchange = ev => {
         const f = inp.dataset.f, v = ev.target.value;
         const nv = (f === 'hb' || f === 'slg') ? (parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) : v;
-        /* 직접 수정도 업로드와 동일하게 변경 추적 → 빨간 글씨 + 이전 값 툴팁 + Remark 자동 기입 */
-        if (TRACKF.includes(f)) {
+        /* 직접 수정도 업로드와 동일하게 변경 추적 → 빨간 글씨 + 이전 값 툴팁 (Remark 포함) */
+        if (TRACKF.includes(f) || f === 'comment') {
           const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
-          const a = norm(r[f] === 0 ? '' : r[f]), b2 = norm(nv === 0 ? '' : nv);
-          if (a !== b2) r.changes = Object.assign({}, r.changes, { [f]: { from: a || '(없음)', to: b2 } });
+          /* Remark는 comment가 비면 remarks를 보여주므로, 화면에 보이던 값과 비교 */
+          const old = f === 'comment'
+            ? (r.comment !== '' && r.comment != null ? r.comment : (r.remarks || ''))
+            : (r[f] === 0 ? '' : r[f]);
+          const a = norm(old), b2 = norm(nv === 0 ? '' : nv);
+          if (a !== b2 || r.changes[f]) {
+            /* 이미 빨간 칸이면 최초 원래 값(from) 유지 — 원래 값으로 되돌리면 표시 자동 제거 */
+            const prev = r.changes[f];
+            const orig = prev ? (prev.from === '(없음)' ? '' : norm(prev.from)) : a;
+            if (b2 === orig) {
+              const c = Object.assign({}, r.changes); delete c[f]; r.changes = c;
+            } else {
+              r.changes = Object.assign({}, r.changes, { [f]: { from: orig || '(없음)', to: b2 } });
+            }
+          }
         }
         r[f] = nv;
         if (f === 'comment') r.remarks = nv;   /* Remark는 하나의 값으로 통일 — 지우면 지워진 채 유지 */
@@ -1087,8 +1118,8 @@ function sheetFor(brand) {
     const remark = [r.cancelled ? '[CANCEL]' : '', r.comment || r.remarks || ''].filter(Boolean).join(' / ');
     rows.push([null, { v: AB(r.brand), s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
       { v: r.xf, s: sty('xf') }, { v: r.hb || '', s: sty('hb') }, { v: r.slg || '', s: sty('slg') },
-      { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: base },
-      { v: r.status || '', s: base }, { v: remark, s: base }]);
+      { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: sty('mtrl_sched') },
+      { v: r.status || '', s: sty('status') }, { v: remark, s: sty('comment') }]);
   }
   rows.push([null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
              { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }]);
@@ -1632,13 +1663,27 @@ async function handleUpload(fileList) {
         }
         if (cur) {
           seen.add(cur.id);
-          const ch = {};
+          const ch = {}, rm = [];
           const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
+          /* 이미 빨간 칸은 최초 원래 값(from) 기준 — 파일 값이 원래 값으로 돌아오면 표시 제거 */
+          const mark = (f, a, b) => {
+            const prev = (cur.changes || {})[f];
+            const orig = prev ? (prev.from === '(없음)' ? '' : norm(prev.from)) : a;
+            if (b === orig) { if (prev) rm.push(f); }
+            else ch[f] = { from: orig || '(없음)', to: b };
+          };
           for (const f of CMP) {
             const a = norm(cur[f]), b = norm(rec[f]);
-            if (b !== '' && a !== b) { ch[f] = { from: a || '(없음)', to: b }; cur[f] = rec[f]; }
+            if (b !== '' && a !== b) { mark(f, a, b); cur[f] = rec[f]; }
           }
-          /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐 */
+          /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐. 바뀌면 빨간 표시 */
+          const oldRk = norm(cur.comment !== '' && cur.comment != null ? cur.comment : (cur.remarks || ''));
+          const newRk = norm(rec.remarks || '');
+          if (newRk !== '' && oldRk !== newRk) mark('comment', oldRk, newRk);
+          if (rm.length) {
+            const c = Object.assign({}, cur.changes);
+            rm.forEach(f => delete c[f]); cur.changes = c;
+          }
           cur.remarks = rec.remarks || '';
           cur.comment = rec.remarks || '';
           /* Remark에 캔슬/cancel 이 쓰여 있으면 취소 처리 (빨간 하이라이트 + 개발실 최종 삭제 대상) */
