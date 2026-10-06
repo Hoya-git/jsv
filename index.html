@@ -147,6 +147,14 @@ td.editing.num{width:1%}
 .sales-only{display:none !important}
 .admin-only{display:none !important}
 .roleDEV .admin-only{display:inline-flex !important}
+/* 셀 글자색 토글 (영업: 셀 선택 시 표시) */
+#cellbar{display:none;position:absolute;z-index:60;gap:2px;padding:3px;border-radius:7px;
+  background:var(--surface-1);border:1px solid var(--ring);box-shadow:0 4px 14px rgba(0,0,0,.18)}
+#cellbar button{width:26px;height:24px;border:1px solid var(--grid);border-radius:5px;cursor:pointer;
+  background:var(--surface-1);font:inherit;font-size:13px;font-weight:800;line-height:1;padding:0}
+#cellbar button:hover{background:#f0f3f8}
+#cb-red{color:var(--changed);text-decoration:underline;text-decoration-color:var(--changed);text-decoration-thickness:3px;text-underline-offset:2px}
+#cb-black{color:var(--ink);text-decoration:underline;text-decoration-color:var(--ink);text-decoration-thickness:3px;text-underline-offset:2px}
 .search{font:inherit;font-size:14px;font-weight:600;padding:7px 12px;border-radius:8px;
   border:1px solid var(--axis);background:var(--surface-1);min-width:330px;color:var(--ink)}
 .search:focus{outline:none;border-color:var(--s1)}
@@ -200,6 +208,7 @@ td.editing.num{width:1%}
 </style>
 </head>
 <body class="roleSALES">
+<div id="cellbar"><button id="cb-red" type="button">A</button><button id="cb-black" type="button">A</button></div>
 <div id="lightbox"><img alt=""></div>
 <div id="pw-modal"><div class="pwbox">
   <h3 id="pw-title">개발실 모드</h3>
@@ -324,6 +333,7 @@ const I18N = {
     b_done: '완료 건 보기', b_done_hide: '완료 건 숨기기', b_upload: '엑셀 업로드',
     b_xls_one: '엑셀 (이 브랜드)', b_xls_all: '엑셀 (전체 브랜드)', b_addrow: '+ 행 추가',
     b_clrchg: '✓ 변경 표시 지우기', clr_confirm: '이 브랜드의 빨간 변경 표시를 모두 지울까요? (확인 완료 처리)',
+    clr_red: '빨간 글씨', clr_black: '검은 글씨', mark_manual: '(직접 표시)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: '샘플 작지 전달일', c_mtrl: '자재스케줄', c_status: '현황', c_remark: 'Remarks',
     c_recv: '접수', c_done: '완료', c_cancel: '취소', c_del: '최종 삭제', c_cancelled: '취소됨',
@@ -364,6 +374,7 @@ const I18N = {
     b_done: 'Show finished', b_done_hide: 'Hide finished', b_upload: 'Upload Excel',
     b_xls_one: 'Excel (this brand)', b_xls_all: 'Excel (all brands)', b_addrow: '+ Add row',
     b_clrchg: '✓ Clear change marks', clr_confirm: 'Clear all red change marks for this brand? (mark as reviewed)',
+    clr_red: 'Red text', clr_black: 'Black text', mark_manual: '(marked manually)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'W/S pass date', c_mtrl: 'Material sched.', c_status: 'Status', c_remark: 'Remarks',
     c_recv: 'Received', c_done: 'Done', c_cancel: 'Cancel', c_del: 'Delete', c_cancelled: 'Cancelled',
@@ -404,6 +415,7 @@ const I18N = {
     b_done: 'Xem đã xong', b_done_hide: 'Ẩn đã xong', b_upload: 'Tải file Excel',
     b_xls_one: 'Excel (thương hiệu này)', b_xls_all: 'Excel (tất cả)', b_addrow: '+ Thêm dòng',
     b_clrchg: '✓ Xóa đánh dấu thay đổi', clr_confirm: 'Xóa tất cả đánh dấu đỏ của thương hiệu này? (đã kiểm tra xong)',
+    clr_red: 'Chữ đỏ', clr_black: 'Chữ đen', mark_manual: '(đánh dấu tay)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'Ngày giao W/S', c_mtrl: 'Lịch nguyên liệu', c_status: 'Tình trạng', c_remark: 'Ghi chú',
     c_recv: 'Tiếp nhận', c_done: 'Xong', c_cancel: 'Huỷ', c_del: 'Xoá', c_cancelled: 'Đã huỷ',
@@ -902,6 +914,44 @@ el('btn-clr-chg').onclick = () => {
   drawSales(); dirty('requests');
 };
 
+/* ---------- 셀 글자색 수동 토글: 셀을 선택하면 빨강/검정 버튼 표시 (영업 모드) ---------- */
+const cellbar = el('cellbar');
+let CB_T = null;
+document.addEventListener('focusin', e => {
+  const inp = e.target;
+  if (!inp.classList || !inp.classList.contains('cellin')) return;
+  const tr = inp.closest('#t-sales tr[data-id]');
+  if (!tr || !can.edit() || !inp.dataset.f) { cellbar.style.display = 'none'; return; }
+  CB_T = { id: tr.dataset.id, f: inp.dataset.f };
+  const rc = inp.getBoundingClientRect();
+  cellbar.style.display = 'flex';
+  cellbar.style.left = Math.max(2, window.scrollX + rc.left) + 'px';
+  cellbar.style.top = Math.max(2, window.scrollY + rc.top - 34) + 'px';
+});
+document.addEventListener('focusout', () => {
+  setTimeout(() => {
+    const a = document.activeElement;
+    if (!(a && a.classList && a.classList.contains('cellin'))) cellbar.style.display = 'none';
+  }, 150);
+});
+function cbApply(red) {
+  if (!CB_T || !can.edit()) return;
+  const r = R.find(x => x.id === CB_T.id); if (!r) return;
+  const f = CB_T.f;
+  const c = Object.assign({}, r.changes);
+  if (red) {
+    if (!c[f]) {
+      const v = f === 'comment' ? (r.comment !== '' && r.comment != null ? r.comment : (r.remarks || '')) : (r[f] === 0 ? '' : r[f]);
+      c[f] = { from: T('mark_manual'), to: String(v ?? ''), m: 1 };
+    }
+  } else delete c[f];
+  r.changes = c;
+  cellbar.style.display = 'none';
+  drawSales(); dirty('requests');
+}
+el('cb-red').onmousedown = e => { e.preventDefault(); cbApply(true); };
+el('cb-black').onmousedown = e => { e.preventDefault(); cbApply(false); };
+
 /* 직접 수정 시 변경 추적 대상 필드 */
 const TRACKF = ['season', 'stage', 'xf', 'hb', 'slg', 'ws_pass', 'mtrl_sched', 'status'];
 function salesRows() {
@@ -958,6 +1008,8 @@ function drawSales() {
   el('btn-xlsx-all').textContent = T('b_xls_all');
   el('btn-add-row').textContent = T('b_addrow');
   el('btn-clr-chg').textContent = T('b_clrchg');
+  el('cb-red').title = T('clr_red');
+  el('cb-black').title = T('clr_black');
 
   const rows = salesRows();
   const all = ofBrand(curBrand).filter(visible);
@@ -1063,7 +1115,8 @@ function drawSales() {
           if (a !== b2 || r.changes[f]) {
             /* 이미 빨간 칸이면 최초 원래 값(from) 유지 — 원래 값으로 되돌리면 표시 자동 제거 */
             const prev = r.changes[f];
-            const orig = prev ? (prev.from === '(없음)' ? '' : norm(prev.from)) : a;
+            /* 수동(버튼) 표시였던 칸은 지금 보이는 값을 원래 값으로 삼음 */
+            const orig = prev ? (prev.m ? a : (prev.from === '(없음)' ? '' : norm(prev.from))) : a;
             if (b2 === orig) {
               const c = Object.assign({}, r.changes); delete c[f]; r.changes = c;
             } else {
