@@ -651,12 +651,24 @@ const XR = (() => {
       });
       return '';
     });
+    /* 글자색 (폰트) — 영업이 엑셀에서 빨간 글씨로 표시한 변경 칸 감지용 */
+    const fontColors = [];
+    (f['xl/styles.xml'] || '').replace(/<fonts[^>]*>([\s\S]*?)<\/fonts>/, (_, b) => {
+      b.replace(/<font\/>|<font>([\s\S]*?)<\/font>/g, (__, one) => {
+        const m = (one || '').match(/<color[^>]*rgb="([0-9A-Fa-f]{6,8})"/);
+        fontColors.push(m ? m[1].slice(-6).toUpperCase() : '');
+        return '';
+      });
+      return '';
+    });
     const xfFill = [];
+    const xfFont = [];
     const xfIds = [];
     (f['xl/styles.xml'] || '').replace(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/, (_, b) => {
       b.replace(/<xf([^>]*)[/>]/g, (__, a) => {
         xfIds.push((a.match(/numFmtId="(\d+)"/) || [])[1] || '0');
         xfFill.push(fillColors[+((a.match(/fillId="(\d+)"/) || [])[1] || 0)] || '');
+        xfFont.push(fontColors[+((a.match(/fontId="(\d+)"/) || [])[1] || 0)] || '');
         return '';
       });
       return '';
@@ -733,6 +745,8 @@ const XR = (() => {
             cells[colIdx(ref) - 1] = String(v).trim();
             const fc = xfFill[+s || 0] || '';
             if (fc) (cells.fills = cells.fills || {})[colIdx(ref) - 1] = fc;
+            const ft = xfFont[+s || 0] || '';
+            if (ft) (cells.fonts = cells.fonts || {})[colIdx(ref) - 1] = ft;
           }
           return '';
         });
@@ -1577,6 +1591,12 @@ const YELLOWISH = h => {
   if (['FFEB9C', 'FFF2CC', 'FFE699'].includes(x)) return true;
   return x.startsWith('FFFF') && parseInt(x.slice(4), 16) < 0xE0;
 };
+/* 빨간 계열 글자색 (FF0000, C00000 등) — 영업이 엑셀에서 변경 표시한 칸 */
+const REDISH = h => {
+  if (!h || h.length < 6) return false;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return r >= 0xB0 && g <= 0x60 && b <= 0x60;
+};
 function sheetToRecords(rows) {
   let hi = -1;
   for (let i = 0; i < Math.min(rows.length, 25); i++)
@@ -1612,6 +1632,12 @@ function sheetToRecords(rows) {
       mtrl_sched: g('mtrl_sched'), status: g('status'), remarks: g('remarks'),
       received: !rowYellow };            /* 흰 배경 = 접수 완료 · 노란색 = 미접수 */
     if (!rec.stage && !rec.xf && !rec.hb && !rec.slg) continue;
+    /* 파일에서 빨간 글씨로 표시된 칸 기록 → 대시보드 빨간 표시와 1:1 매치 */
+    const fonts = row.fonts || {};
+    const reds = {};
+    for (const f of ['season', 'stage', 'xf', 'hb', 'slg', 'ws_pass', 'mtrl_sched', 'status', 'remarks'])
+      if (map[f] != null && REDISH(fonts[map[f]])) reds[f] = true;
+    if (Object.keys(reds).length) rec._red = reds;
     out.push(rec);
   }
   return out;
@@ -1648,6 +1674,11 @@ async function handleUpload(fileList) {
       use.forEach(s => recs.push(...s.recs));
       files++;
 
+      /* 파일에 빨간 글씨 표시가 하나라도 있으면: 파일의 빨간 칸이 기준
+         (파일에서 빨간 칸만 빨갛게, 나머지는 검정 — 대시보드와 1:1 매치).
+         빨간 글씨가 전혀 없는 파일은 기존처럼 값 비교로 변경 칸을 표시 */
+      const useRed = recs.some(rc => rc._red);
+
       const seen = new Set();
       const orderIds = [];                       /* 파일 행 순서 기록 */
       const CXKW = /캔슬|cancel/i;               /* Remark의 캔슬 키워드 → 취소 처리 */
@@ -1672,17 +1703,33 @@ async function handleUpload(fileList) {
             if (b === orig) { if (prev) rm.push(f); }
             else ch[f] = { from: orig || '(없음)', to: b };
           };
-          for (const f of CMP) {
-            const a = norm(cur[f]), b = norm(rec[f]);
-            if (b !== '' && a !== b) { mark(f, a, b); cur[f] = rec[f]; }
-          }
-          /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐. 바뀌면 빨간 표시 */
           const oldRk = norm(cur.comment !== '' && cur.comment != null ? cur.comment : (cur.remarks || ''));
           const newRk = norm(rec.remarks || '');
-          if (newRk !== '' && oldRk !== newRk) mark('comment', oldRk, newRk);
-          if (rm.length) {
-            const c = Object.assign({}, cur.changes);
-            rm.forEach(f => delete c[f]); cur.changes = c;
+          if (useRed) {
+            /* 파일의 빨간 글씨 = 대시보드 빨간 표시 (그 외 표시는 지움) */
+            const nch = {};
+            for (const f of CMP) {
+              const a = norm(cur[f]), b = norm(rec[f]);
+              if (b !== '' && a !== b) cur[f] = rec[f];
+              if (rec._red && rec._red[f] && b !== '')
+                nch[f] = { from: a !== '' && a !== b ? a : '(엑셀 표시)', to: b };
+            }
+            if (rec._red && rec._red.remarks && newRk !== '')
+              nch.comment = { from: oldRk !== '' && oldRk !== newRk ? oldRk : '(엑셀 표시)', to: newRk };
+            if (JSON.stringify(nch) !== JSON.stringify(cur.changes || {})) updated++;
+            cur.changes = nch;
+            changedCells += Object.keys(nch).length;
+          } else {
+            for (const f of CMP) {
+              const a = norm(cur[f]), b = norm(rec[f]);
+              if (b !== '' && a !== b) { mark(f, a, b); cur[f] = rec[f]; }
+            }
+            /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐. 바뀌면 빨간 표시 */
+            if (newRk !== '' && oldRk !== newRk) mark('comment', oldRk, newRk);
+            if (rm.length) {
+              const c = Object.assign({}, cur.changes);
+              rm.forEach(f => delete c[f]); cur.changes = c;
+            }
           }
           cur.remarks = rec.remarks || '';
           cur.comment = rec.remarks || '';
@@ -1699,10 +1746,19 @@ async function handleUpload(fileList) {
         } else {
           const nid = 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           const kw = CXKW.test(rec.remarks || '');
+          /* 신규 행도 파일의 빨간 글씨 칸은 그대로 빨갛게 */
+          const nch = {};
+          if (useRed && rec._red) {
+            for (const f of CMP) if (rec._red[f] && String(rec[f] ?? '').trim() !== '')
+              nch[f] = { from: '(없음)', to: String(rec[f]).trim() };
+            if (rec._red.remarks && (rec.remarks || '').trim() !== '')
+              nch.comment = { from: '(없음)', to: (rec.remarks || '').trim() };
+          }
+          delete rec._red;
           R.unshift(Object.assign({
             id: nid, orig: '', season_n: '', stage_n: '', done: false,
             cancelled: kw, cxByRemark: kw || undefined,
-            changes: {}, comment: rec.remarks || '', isNew: true
+            changes: nch, comment: rec.remarks || '', isNew: true
           }, rec, kw ? { received: false } : {}));
           seen.add(nid);
           orderIds.push(nid);
@@ -2508,6 +2564,19 @@ setInterval(async () => {
 }, 45000);
 
 snapReq();   /* 초기 로드 스냅샷 (중복 id 교정 포함) */
+/* 2026-10 일회성 정리: GAP(GA) 행 제거 (영업 요청) — 2026-11-30까지만 동작 후 자동 비활성 */
+if (TODAY <= '2026-11-30') {
+  let gone = 0;
+  for (let i = R.length - 1; i >= 0; i--)
+    if ((R[i].brand_full || '').toUpperCase() === 'GAP') { R.splice(i, 1); gone++; }
+  if (gone) {
+    if (UPMETA.GAP) { delete UPMETA.GAP; dirty('up_meta'); }
+    BRANDS.length = 0;
+    [...new Set(R.map(x => x.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
+    if (!BRANDS.includes(curBrand)) curBrand = BRANDS[0];
+    dirty('requests');
+  }
+}
 renderAll(); /* 교정된 id로 화면 다시 그리기 */
 sbStatus(SYNC_TS ? '동기화됨' : '오프라인 데이터', SYNC_TS ? 'ok' : 'err');
 
