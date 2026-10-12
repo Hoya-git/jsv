@@ -1117,11 +1117,14 @@ function drawSales() {
             const prev = r.changes[f];
             /* 수동(버튼) 표시였던 칸은 지금 보이는 값을 원래 값으로 삼음 */
             const orig = prev ? (prev.m ? a : (prev.from === '(없음)' ? '' : norm(prev.from))) : a;
-            if (b2 === orig) {
-              const c = Object.assign({}, r.changes); delete c[f]; r.changes = c;
-            } else {
-              r.changes = Object.assign({}, r.changes, { [f]: { from: orig || '(없음)', to: b2 } });
-            }
+            const c = Object.assign({}, r.changes);
+            if (b2 === orig) delete c[f];
+            else if (orig === '') {
+              /* 빈 칸에 새로 입력(행추가 포함)은 자동 빨간 표시 안 함 — 원하면 글자색 버튼 사용 */
+              if (prev && prev.m) c[f] = Object.assign({}, prev, { to: b2 });
+              else delete c[f];
+            } else c[f] = { from: orig, to: b2 };
+            r.changes = c;
           }
         }
         r[f] = nv;
@@ -1747,20 +1750,15 @@ async function handleUpload(fileList) {
         }
         if (cur) {
           seen.add(cur.id);
-          const ch = {}, rm = [];
           const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
-          /* 이미 빨간 칸은 최초 원래 값(from) 기준 — 파일 값이 원래 값으로 돌아오면 표시 제거 */
-          const mark = (f, a, b) => {
-            const prev = (cur.changes || {})[f];
-            const orig = prev ? (prev.from === '(없음)' ? '' : norm(prev.from)) : a;
-            if (b === orig) { if (prev) rm.push(f); }
-            else ch[f] = { from: orig || '(없음)', to: b };
-          };
+          const prevCh = cur.changes || {};
           const oldRk = norm(cur.comment !== '' && cur.comment != null ? cur.comment : (cur.remarks || ''));
           const newRk = norm(rec.remarks || '');
+          /* 업로드 = 새 기준: 이전 빨간 표시는 리셋하고 이번 업로드 기준으로 다시 계산.
+             (수동 글자색 버튼으로 칠한 표시는 값이 그대로면 유지) */
+          const nch = {};
           if (useRed) {
-            /* 파일의 빨간 글씨 = 대시보드 빨간 표시 (그 외 표시는 지움) */
-            const nch = {};
+            /* 파일에 빨간 글씨가 있으면: 파일의 빨간 칸 = 대시보드 빨간 표시 */
             for (const f of CMP) {
               const a = norm(cur[f]), b = norm(rec[f]);
               if (b !== '' && a !== b) cur[f] = rec[f];
@@ -1769,21 +1767,23 @@ async function handleUpload(fileList) {
             }
             if (rec._red && rec._red.remarks && newRk !== '')
               nch.comment = { from: oldRk !== '' && oldRk !== newRk ? oldRk : '(엑셀 표시)', to: newRk };
-            if (JSON.stringify(nch) !== JSON.stringify(cur.changes || {})) updated++;
-            cur.changes = nch;
-            changedCells += Object.keys(nch).length;
           } else {
+            /* 빨간 글씨 없는 파일: '기재돼 있던 값이 달라진' 칸만 빨갛게.
+               빈 칸을 새로 채운 것(신규 입력)은 표시하지 않음 */
             for (const f of CMP) {
               const a = norm(cur[f]), b = norm(rec[f]);
-              if (b !== '' && a !== b) { mark(f, a, b); cur[f] = rec[f]; }
+              if (b !== '' && a !== b) {
+                cur[f] = rec[f];
+                if (a !== '') nch[f] = { from: a, to: b };
+                else if (prevCh[f] && prevCh[f].m) nch[f] = Object.assign({}, prevCh[f], { to: b });
+              } else if (prevCh[f] && prevCh[f].m) nch[f] = prevCh[f];   /* 수동 표시 유지 */
             }
-            /* Remark는 파일이 기준 — 파일에서 지웠으면 대시보드에서도 지워짐. 바뀌면 빨간 표시 */
-            if (newRk !== '' && oldRk !== newRk) mark('comment', oldRk, newRk);
-            if (rm.length) {
-              const c = Object.assign({}, cur.changes);
-              rm.forEach(f => delete c[f]); cur.changes = c;
-            }
+            if (newRk !== '' && oldRk !== newRk && oldRk !== '') nch.comment = { from: oldRk, to: newRk };
+            else if (prevCh.comment && prevCh.comment.m && oldRk === newRk) nch.comment = prevCh.comment;
           }
+          if (JSON.stringify(nch) !== JSON.stringify(prevCh)) updated++;
+          changedCells += Object.keys(nch).filter(f => !nch[f].m).length;
+          cur.changes = nch;
           cur.remarks = rec.remarks || '';
           cur.comment = rec.remarks || '';
           /* Remark에 캔슬/cancel 이 쓰여 있으면 취소 처리 (빨간 하이라이트 + 개발실 최종 삭제 대상) */
@@ -1792,10 +1792,6 @@ async function handleUpload(fileList) {
           else if (!kw && cur.cxByRemark) { cur.cancelled = false; cur.cxByRemark = false; }
           if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
           orderIds.push(cur.id);
-          if (Object.keys(ch).length) {
-            cur.changes = Object.assign({}, cur.changes, ch);
-            changedCells += Object.keys(ch).length; updated++;
-          }
         } else {
           const nid = 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           const kw = CXKW.test(rec.remarks || '');
