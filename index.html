@@ -1091,10 +1091,13 @@ function drawSales() {
       <td colspan="${COLS.length - 6}">${(shb + sslg).toLocaleString()} pcs</td></tr></tbody>`;
 
   el('t-sales').querySelectorAll('tbody tr[data-id]').forEach(tr => {
-    const r = R.find(x => x.id === tr.dataset.id);
+    /* 동기화(저장 병합)가 행 객체를 교체할 수 있으므로, 이벤트 시점에 id로 다시 찾는다.
+       렌더 시점 객체를 계속 쓰면 입력이 교체 전 객체에 쓰여 사라지는(blank) 현상이 생김 */
+    const row = () => R.find(x => x.id === tr.dataset.id);
     tr.querySelectorAll('input[type=checkbox]').forEach(cb => {
       if (!can.edit()) { cb.disabled = true; return; }
       cb.onchange = ev => {
+        const r = row(); if (!r) return;
         r[cb.dataset.k] = ev.target.checked;
         touchBrand(r);
         drawChips(); drawSales(); dirty('requests');
@@ -1102,6 +1105,7 @@ function drawSales() {
     });
     tr.querySelectorAll('.cellin, .cmt').forEach(inp => {
       inp.onchange = ev => {
+        const r = row(); if (!r) return;
         const f = inp.dataset.f, v = ev.target.value;
         const nv = (f === 'hb' || f === 'slg') ? (parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) : v;
         /* 직접 수정도 업로드와 동일하게 변경 추적 → 빨간 글씨 + 이전 값 툴팁 (Remark 포함) */
@@ -1140,6 +1144,7 @@ function drawSales() {
     });
     const cbt = tr.querySelector('.rowcancel');
     if (cbt) cbt.onclick = () => {
+      const r = row(); if (!r) return;
       r.cancelled = !r.cancelled;
       if (r.cancelled) {
         r.received = false;
@@ -1150,6 +1155,7 @@ function drawSales() {
     };
     const dbt = tr.querySelector('.rowdel');
     if (dbt) dbt.onclick = () => {
+      const r = row(); if (!r) return;
       if (!can.del(r)) return;
       if (!confirm(`${r.brand_full} / ${r.season} / ${r.stage}`)) return;
       const i = R.findIndex(x => x.id === r.id);
@@ -2543,7 +2549,11 @@ async function sbPush() {
       } catch (e) {}
     }
     const all = SB_SETS();
-    const rows = names.map(n => ({ name: n, value: all[n], updated_by: ROLE, updated_at: new Date().toISOString() }));
+    /* 전송 '시점'의 깊은 복사본을 보내고, 기준 스냅샷도 그 복사본으로 잡는다.
+       (전송 중에 사용자가 입력한 값이 '이미 저장된 것'으로 오인돼 날아가는 것 방지) */
+    const pushedReq = names.includes('requests') ? JSON.parse(JSON.stringify(R)) : null;
+    const rows = names.map(n => ({ name: n, value: n === 'requests' ? pushedReq : all[n],
+      updated_by: ROLE, updated_at: new Date().toISOString() }));
     const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?on_conflict=name', {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json',
@@ -2552,7 +2562,15 @@ async function sbPush() {
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     (await r.json()).forEach(x => { if (x.updated_at > SYNC_TS) SYNC_TS = x.updated_at; });
-    if (names.includes('requests')) snapReq();   /* 병합 결과를 새 기준 스냅샷으로 */
+    if (pushedReq) {
+      /* 기준 = 실제로 서버에 올라간 내용. 전송 중 생긴 입력은 기준과 달라서 다음 저장에 포함된다 */
+      REQ_BASE = {};
+      pushedReq.forEach(x => { REQ_BASE[x.id] = JSON.stringify(x); });
+      if (JSON.stringify(R) !== JSON.stringify(pushedReq)) {
+        SYNC_DIRTY.add('requests');
+        clearTimeout(SYNC_TIMER); SYNC_TIMER = setTimeout(sbPush, 1200);
+      }
+    }
     if (names.includes('execs'))   /* 시딩용 분할 행 정리 */
       fetch(SB_URL + '/rest/v1/jsv_datasets?name=like.execs:*', { method: 'DELETE', headers: SB_H }).catch(() => {});
     sbStatus('저장됨 ' + new Date().toLocaleTimeString().replace(/:\d+$/, ''), 'ok');
@@ -2580,6 +2598,8 @@ window.addEventListener('beforeunload', e => {
 async function sbRefresh() {
   const r = await fetch(SB_URL + '/rest/v1/jsv_datasets?select=name,value,updated_at&name=neq.app_html', { headers: SB_H });
   if (!r.ok) return;
+  /* 받아오는 동안 사용자가 뭔가 입력/저장 중이면 덮어쓰지 않음 — 다음 폴링에서 다시 */
+  if (SYNC_DIRTY.size || SYNC_BUSY) return;
   const rows = await r.json();
   const D = {}, chunks = {};
   rows.forEach(x => {
