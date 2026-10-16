@@ -140,6 +140,9 @@ input[type=checkbox]{accent-color:var(--s1);width:16px;height:16px;cursor:pointe
   min-width:150px;line-height:1.4;display:block;font:inherit;font-size:13.5px}
 td.longcell{min-width:160px}
 td.editing.num{width:1%}
+/* XF date는 줄바꿈 없이 전체 표시 */
+td.xfcell{min-width:112px;white-space:nowrap}
+.cellin.xf{min-width:100px}
 .topbar{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2)}
 .topbar select{font:inherit;font-size:13px;font-weight:700;padding:5px 9px;border-radius:7px;
   border:1px solid var(--ring);background:var(--surface-1);color:var(--ink);cursor:pointer}
@@ -877,8 +880,10 @@ let curBrand = BRANDS[0], onlyPending = false, showDone = false, onlyCancelled =
 const ofBrand = b => R.filter(r => r.brand_full === b);
 const visible = r => showDone || !r.done;
 
+/* 표시할 내용(완료 숨김 기준)이 있는 브랜드만 — 완료 건 보기를 켜면 다시 나타남 */
+const visBrands = () => BRANDS.filter(b => ofBrand(b).filter(visible).length);
 function drawChips() {
-  el('brand-chips').innerHTML = BRANDS.map(b => {
+  el('brand-chips').innerHTML = visBrands().map(b => {
     const list = ofBrand(b).filter(visible);
     const p = list.filter(r => !r.received && !r.cancelled).length;
     const rc = list.filter(r => r.received).length;
@@ -963,8 +968,11 @@ function salesRows() {
 
 /* 영업 차트 업로드 알림: 샘플 현황 차트 탭에 표시. 개발실 모드만 클릭 가능, 클릭하면 사라짐.
    (기록 자체는 남겨서 브랜드별 last updated 표시에 사용) */
+/* 알림 기준 시각: 업로드(at)와 직접 수정(ed) 중 최신 */
+const upT = m => [m && m.at, m && m.ed].filter(Boolean).sort().pop() || '';
+const upNew = m => { const t = upT(m); return t && (!m.ack || t > m.ack); };
 function salesTabLabel() {
-  const hasNew = Object.values(UPMETA).some(m => m && m.at && !m.ack);
+  const hasNew = Object.values(UPMETA).some(m => m && upNew(m));
   el('tab-sales').innerHTML = esc(T('tab_sales')) +
     (hasNew ? '<i class="reddot" style="margin-left:6px"></i>' : '');
 }
@@ -972,6 +980,7 @@ function salesTabLabel() {
 function touchBrand(r) {
   const m = UPMETA[r.brand_full] = UPMETA[r.brand_full] || {};
   m.ed = new Date().toISOString();
+  if (ROLE === 'DEV') m.ack = m.ed;   /* 개발실 자신의 조작(취소 건 삭제 등)은 알림 대상 아님 */
   dirty('up_meta');
 }
 /* 브랜드의 마지막 업데이트(업로드 또는 직접 수정) 시각 */
@@ -983,13 +992,13 @@ function lastUpdOf(b) {
 }
 function drawUpStrip() {
   salesTabLabel();
-  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && UPMETA[b].at && !UPMETA[b].ack).sort();
+  const ub = Object.keys(UPMETA).filter(b => UPMETA[b] && upNew(UPMETA[b])).sort();
   const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
   el('up-strip').innerHTML = !ub.length ? '' :
     `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
     ub.map(b => `<button class="chip upchip new" data-ub="${esc(b)}"
         title="${esc(ROLE === 'DEV' ? T('up_click') : T('up_new'))}">
-        ${esc(AB(b))}<span class="small muted"> ${lt(UPMETA[b].at)}</span><i class="reddot"></i></button>`).join('');
+        ${esc(AB(b))}<span class="small muted"> ${lt(upT(UPMETA[b]))}</span><i class="reddot"></i></button>`).join('');
   el('up-strip').onclick = ev => {
     const btn = ev.target.closest('[data-ub]'); if (!btn) return;
     if (ROLE !== 'DEV') return;                    /* 개발실만 확인(제거) 가능 */
@@ -998,7 +1007,8 @@ function drawUpStrip() {
   };
 }
 function drawSales() {
-  if (!BRANDS.includes(curBrand)) curBrand = BRANDS[0];
+  const vb = visBrands();
+  if (!vb.includes(curBrand)) curBrand = vb[0] || BRANDS[0];
   drawUpStrip();
   el('btn-only-pending').textContent = onlyPending ? T('b_all') : T('b_pending_only');
   el('btn-only-cancel').textContent = onlyCancelled ? T('b_all') : T('b_cancel_only');
@@ -1057,7 +1067,7 @@ function drawSales() {
         <textarea class="cellin ta" data-f="${f}" rows="1"
         ${can.edit() ? '' : 'readonly'}>${esc(r[f] || '')}</textarea></td>`;
     }
-    return `<td class="editing${cls === 'num' ? ' num' : ''}${red}"${t}>
+    return `<td class="editing${cls === 'num' ? ' num' : ''}${cls === 'xf' ? ' xfcell' : ''}${red}"${t}>
       <input class="cellin ${cls || ''}" data-f="${f}" value="${esc(r[f] === 0 ? '' : r[f])}"
       ${can.edit() ? '' : 'readonly'}></td>`;
   };
@@ -1073,7 +1083,7 @@ function drawSales() {
       const rmk = r.comment !== '' && r.comment != null ? r.comment : (r.remarks || '');
       return `<tr class="${cls}" data-id="${r.id}">
         <td>${esc(AB(r.brand))}</td>
-        ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
+        ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf', 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
         ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
         <td class="longcell${r.changes.comment ? ' chg' : ''}"${r.changes.comment
           ? ` title="${esc(r.changes.comment.from)}"` : ''}><textarea class="cellin ta cmt" data-f="comment" rows="1"
@@ -1382,7 +1392,12 @@ const lastDateOf = str => {
   m = s.match(/\d{1,2}\s*\/\s*\d{1,2}/g);
   if (m) {
     const [mm, dd] = m[m.length - 1].split('/').map(x => +x);
-    return TODAY.slice(0, 4) + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+    const y = +TODAY.slice(0, 4);
+    const mk = yy => yy + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+    let d = mk(y);
+    /* 연도 없는 날짜가 6개월 넘게 과거면 내년으로 해석 (예: 10월에 쓴 '1/13' = 내년 1월) */
+    if (d < TODAY && (new Date(TODAY) - new Date(d)) / 86400000 > 183) d = mk(y + 1);
+    return d;
   }
   return '';
 };
@@ -1924,7 +1939,7 @@ const DEV_FIELD = h => {
   if (/^line/.test(t)) return 'line';
   return null;
 };
-const PFX = [['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
+const PFX = [['GAP','GAP'],['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
              ['BE','BEIS'],['SN','STANLEY'],['ME','MEEM'],['KE','KEEK'],['QU','QUINCE'],
              ['MJ','MARC JACOB'],['UG','UGG']];
 
@@ -2396,7 +2411,7 @@ el('btn-cost-upload').onclick = () => el('cost-file').click();
 el('cost-file').onchange = e => { handleCostUpload([...e.target.files]); e.target.value = ''; };
 
 /* ---------- 바이어별 작업 분포도 (SCORE.xlsx) ---------- */
-const SC_PFX = [['GF','GF'],['GS','GF'],['ST','ST'],['CH','CH'],['TU','TU'],['AM','AM'],['BE','BE'],
+const SC_PFX = [['GAP','GA'],['GF','GF'],['GS','GF'],['ST','ST'],['CH','CH'],['TU','TU'],['AM','AM'],['BE','BE'],
   ['SN','SN'],['ME','ME'],['KE','KE'],['QN','QN'],['MJ','MJ'],['UG','UG'],['KS','KS'],['AY','AY'],['F','F']];
 const scBrand = (pat, style) => {
   for (const s of [pat, style]) {
