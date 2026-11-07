@@ -281,7 +281,7 @@ td.xfcell{min-width:112px;white-space:nowrap}
     <div class="chips" id="src-chips"></div>
     <span class="spacer"></span>
     <input class="search" id="dev-search" type="search">
-    <button class="btn admin-only" id="btn-dev-upload"></button>
+    <label class="btn admin-only" id="btn-dev-upload" for="dev-file" style="cursor:pointer"></label>
     <input type="file" id="dev-file" accept=".xlsx,.xls" multiple style="display:none">
   </div>
   <div id="dev-log" class="uplog" style="display:none"></div>
@@ -336,6 +336,7 @@ const I18N = {
     b_done: '완료 건 보기', b_done_hide: '완료 건 숨기기', b_upload: '엑셀 업로드',
     b_xls_one: '엑셀 (이 브랜드)', b_xls_all: '엑셀 (전체 브랜드)', b_addrow: '+ 행 추가',
     b_clrchg: '✓ 변경 표시 지우기', clr_confirm: '이 브랜드의 빨간 변경 표시를 모두 지울까요? (확인 완료 처리)',
+    c_upd: '업데이트', up_alldone: '샘플 전부 완료',
     clr_red: '빨간 글씨', clr_black: '검은 글씨', mark_manual: '(직접 표시)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: '샘플 작지 전달일', c_mtrl: '자재스케줄', c_status: '현황', c_remark: 'Remarks',
@@ -377,6 +378,7 @@ const I18N = {
     b_done: 'Show finished', b_done_hide: 'Hide finished', b_upload: 'Upload Excel',
     b_xls_one: 'Excel (this brand)', b_xls_all: 'Excel (all brands)', b_addrow: '+ Add row',
     b_clrchg: '✓ Clear change marks', clr_confirm: 'Clear all red change marks for this brand? (mark as reviewed)',
+    c_upd: 'Updated', up_alldone: 'all samples done',
     clr_red: 'Red text', clr_black: 'Black text', mark_manual: '(marked manually)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'W/S pass date', c_mtrl: 'Material sched.', c_status: 'Status', c_remark: 'Remarks',
@@ -418,6 +420,7 @@ const I18N = {
     b_done: 'Xem đã xong', b_done_hide: 'Ẩn đã xong', b_upload: 'Tải file Excel',
     b_xls_one: 'Excel (thương hiệu này)', b_xls_all: 'Excel (tất cả)', b_addrow: '+ Thêm dòng',
     b_clrchg: '✓ Xóa đánh dấu thay đổi', clr_confirm: 'Xóa tất cả đánh dấu đỏ của thương hiệu này? (đã kiểm tra xong)',
+    c_upd: 'Cập nhật', up_alldone: 'hoàn tất tất cả mẫu',
     clr_red: 'Chữ đỏ', clr_black: 'Chữ đen', mark_manual: '(đánh dấu tay)',
     c_brand: 'Brand', c_season: 'Season', c_stage: 'Stage', c_xf: 'XF date', c_hb: 'HB', c_slg: 'SLG',
     c_ws: 'Ngày giao W/S', c_mtrl: 'Lịch nguyên liệu', c_status: 'Tình trạng', c_remark: 'Ghi chú',
@@ -810,7 +813,7 @@ let DIRTY_IMPL = null;
 const dirty = (...names) => { if (DIRTY_IMPL) DIRTY_IMPL(...names); };
 const SCORE = D.score || {};
 /* 브랜드 약어 */
-const ABBR = { AMAZON: 'AM', BEIS: 'BE', CH: 'CH', GAP: 'GA', GUESS: 'GF', STAUD: 'ST',
+const ABBR = { AMAZON: 'AM', BEIS: 'BE', CH: 'CH', GAP: 'GP', GUESS: 'GF', STAUD: 'ST',
   TOUS: 'TU', STANLEY: 'SN', MEEM: 'ME', QUINCE: 'QN', UGG: 'UG', 'MARC JACOB': 'MJ', KEEK: 'KE', GS: 'GF' };
 const AB = b => ABBR[String(b || '').toUpperCase()] || b;
 
@@ -978,6 +981,7 @@ function salesTabLabel() {
 }
 /* 화면에서 직접 수정 시 해당 브랜드의 마지막 업데이트 시각 기록 */
 function touchBrand(r) {
+  r.upd = TODAY;                       /* 행별 마지막 업데이트 날짜 (차트 맨 앞 칸 표시용) */
   const m = UPMETA[r.brand_full] = UPMETA[r.brand_full] || {};
   m.ed = new Date().toISOString();
   if (ROLE === 'DEV') m.ack = m.ed;   /* 개발실 자신의 조작(취소 건 삭제 등)은 알림 대상 아님 */
@@ -996,9 +1000,14 @@ function drawUpStrip() {
   const lt = iso => { try { return new Date(iso).toLocaleString('sv').slice(5, 16); } catch (e) { return ''; } };
   el('up-strip').innerHTML = !ub.length ? '' :
     `<span class="small muted" style="align-self:center;font-weight:700">${T('up_strip')}</span>` +
-    ub.map(b => `<button class="chip upchip new" data-ub="${esc(b)}"
+    ub.map(b => {
+      /* 보이는 행이 하나도 없으면(전부 완료 등) 칩만 보고도 알 수 있게 문구 추가 */
+      const done = ofBrand(b).filter(visible).length === 0
+        ? `<span class="small" style="font-weight:800;color:#0a7a0a"> ${esc(T('up_alldone'))}</span>` : '';
+      return `<button class="chip upchip new" data-ub="${esc(b)}"
         title="${esc(ROLE === 'DEV' ? T('up_click') : T('up_new'))}">
-        ${esc(AB(b))}<span class="small muted"> ${lt(upT(UPMETA[b]))}</span><i class="reddot"></i></button>`).join('');
+        ${esc(AB(b))}<span class="small muted"> ${lt(upT(UPMETA[b]))}</span>${done}<i class="reddot"></i></button>`;
+    }).join('');
   el('up-strip').onclick = ev => {
     const btn = ev.target.closest('[data-ub]'); if (!btn) return;
     if (ROLE !== 'DEV') return;                    /* 개발실만 확인(제거) 가능 */
@@ -1048,7 +1057,7 @@ function drawSales() {
     tile(T('t_cancel_wait'), cx.length, cx.length ? T('t_cancel_note') : T('t_cancel_note0'),
          cx.length ? 'hot' : 'red');
 
-  const COLS = [T('c_brand'), T('c_season'), T('c_stage'), T('c_xf'), 'HB', 'SLG',
+  const COLS = [T('c_upd'), T('c_brand'), T('c_season'), T('c_stage'), T('c_xf'), 'HB', 'SLG',
                 T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark'),
                 T('c_recv'), T('c_done'), T('c_cancel'), ''];
   const F = (r, f, cls) => {
@@ -1081,7 +1090,9 @@ function drawSales() {
       const cls = r.cancelled ? 'cancelled' : (r.received ? 'recv' : 'pending');
       /* Remark는 자동 생성 없이 사용자가 직접 쓰는 칸 — 변경 내역은 빨간 셀 + 툴팁으로만 표시 */
       const rmk = r.comment !== '' && r.comment != null ? r.comment : (r.remarks || '');
+      const ud = r.upd ? (+r.upd.slice(5, 7)) + '/' + (+r.upd.slice(8, 10)) : '';
       return `<tr class="${cls}" data-id="${r.id}">
+        <td class="small" style="white-space:nowrap;color:var(--ink2);font-weight:700">${ud}</td>
         <td>${esc(AB(r.brand))}</td>
         ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf', 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
         ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
@@ -1096,9 +1107,9 @@ function drawSales() {
         <td>${can.del(r) ? `<button class="rowdel">${T('c_del')}</button>` : ''}</td>
       </tr>`;
     }).join('') +
-    `<tr class="totrow"><td colspan="4" style="text-align:right">${onlyPending ? T('t_pending_qty') + ' ' : ''}TOTAL</td>
+    `<tr class="totrow"><td colspan="5" style="text-align:right">${onlyPending ? T('t_pending_qty') + ' ' : ''}TOTAL</td>
       <td class="num">${shb.toLocaleString()}</td><td class="num">${sslg.toLocaleString()}</td>
-      <td colspan="${COLS.length - 6}">${(shb + sslg).toLocaleString()} pcs</td></tr></tbody>`;
+      <td colspan="${COLS.length - 7}">${(shb + sslg).toLocaleString()} pcs</td></tr></tbody>`;
 
   el('t-sales').querySelectorAll('tbody tr[data-id]').forEach(tr => {
     /* 동기화(저장 병합)가 행 객체를 교체할 수 있으므로, 이벤트 시점에 id로 다시 찾는다.
@@ -1638,7 +1649,7 @@ function renderAll() {
 renderAll();
 
 /* ---------- 엑셀 업로드 → Sample Plan 반영 ---------- */
-const BR_CODE = { GAP:'GAP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UGG', ST:'STAUD', STAUD:'STAUD',
+const BR_CODE = { GAP:'GAP', GP:'GAP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UGG', ST:'STAUD', STAUD:'STAUD',
   AM:'AMAZON', AMAZON:'AMAZON', CH:'CH', ME:'MEEM', MEEM:'MEEM', GF:'GUESS', GS:'GUESS', GUESS:'GUESS',
   TU:'TOUS', TOUS:'TOUS', SN:'STANLEY', STANLEY:'STANLEY', QN:'QUINCE', QUINCE:'QUINCE' };
 
@@ -1771,6 +1782,7 @@ async function handleUpload(fileList) {
         }
         if (cur) {
           seen.add(cur.id);
+          const before0 = JSON.stringify(cur);
           const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
           const prevCh = cur.changes || {};
           const oldRk = norm(cur.comment !== '' && cur.comment != null ? cur.comment : (cur.remarks || ''));
@@ -1812,6 +1824,7 @@ async function handleUpload(fileList) {
           if (kw && !cur.cancelled) { cur.cancelled = true; cur.cxByRemark = true; cur.received = false; }
           else if (!kw && cur.cxByRemark) { cur.cancelled = false; cur.cxByRemark = false; }
           if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
+          if (JSON.stringify(cur) !== before0) cur.upd = TODAY;   /* 이번 업로드로 바뀐 행만 날짜 갱신 */
           orderIds.push(cur.id);
         } else {
           const nid = 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1828,7 +1841,7 @@ async function handleUpload(fileList) {
           R.unshift(Object.assign({
             id: nid, orig: '', season_n: '', stage_n: '', done: false,
             cancelled: kw, cxByRemark: kw || undefined,
-            changes: nch, comment: rec.remarks || '', isNew: true
+            changes: nch, comment: rec.remarks || '', isNew: true, upd: TODAY
           }, rec, kw ? { received: false } : {}));
           seen.add(nid);
           orderIds.push(nid);
@@ -1939,7 +1952,7 @@ const DEV_FIELD = h => {
   if (/^line/.test(t)) return 'line';
   return null;
 };
-const PFX = [['GAP','GAP'],['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
+const PFX = [['GAP','GAP'],['GP','GAP'],['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
              ['BE','BEIS'],['SN','STANLEY'],['ME','MEEM'],['KE','KEEK'],['QU','QUINCE'],
              ['MJ','MARC JACOB'],['UG','UGG']];
 
@@ -2175,7 +2188,8 @@ async function handleDevUpload(fileList) {
     box.innerHTML = '<b style="color:var(--critical)">읽기 실패:</b> ' + esc(err.message);
   }
 }
-el('btn-dev-upload').onclick = () => el('dev-file').click();
+/* 파일 선택은 label(for="dev-file")의 브라우저 기본 동작 사용 —
+   스크립트 .click() 호출이 일부 PC에서 창 포커스를 엉뚱한 곳으로 보내는 문제 회피 */
 el('dev-file').onchange = e => { handleDevUpload([...e.target.files]); e.target.value = ''; };
 
 /* ---------- 마켓 샘플 파일 파서 (브라우저) ---------- */
@@ -2411,7 +2425,7 @@ el('btn-cost-upload').onclick = () => el('cost-file').click();
 el('cost-file').onchange = e => { handleCostUpload([...e.target.files]); e.target.value = ''; };
 
 /* ---------- 바이어별 작업 분포도 (SCORE.xlsx) ---------- */
-const SC_PFX = [['GAP','GA'],['GF','GF'],['GS','GF'],['ST','ST'],['CH','CH'],['TU','TU'],['AM','AM'],['BE','BE'],
+const SC_PFX = [['GAP','GP'],['GP','GP'],['GF','GF'],['GS','GF'],['ST','ST'],['CH','CH'],['TU','TU'],['AM','AM'],['BE','BE'],
   ['SN','SN'],['ME','ME'],['KE','KE'],['QN','QN'],['MJ','MJ'],['UG','UG'],['KS','KS'],['AY','AY'],['F','F']];
 const scBrand = (pat, style) => {
   for (const s of [pat, style]) {
