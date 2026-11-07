@@ -143,6 +143,9 @@ td.editing.num{width:1%}
 /* XF date는 줄바꿈 없이 전체 표시 */
 td.xfcell{min-width:112px;white-space:nowrap}
 .cellin.xf{min-width:100px}
+/* 업데이트 날짜 칸 (수동 수정 가능) */
+td.updcell{width:1%;white-space:nowrap}
+.cellin.upd{width:58px;font-size:12.5px;font-weight:700;color:var(--ink2)}
 .topbar{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;font-weight:700;color:var(--ink2)}
 .topbar select{font:inherit;font-size:13px;font-weight:700;padding:5px 9px;border-radius:7px;
   border:1px solid var(--ring);background:var(--surface-1);color:var(--ink);cursor:pointer}
@@ -929,7 +932,7 @@ document.addEventListener('focusin', e => {
   const inp = e.target;
   if (!inp.classList || !inp.classList.contains('cellin')) return;
   const tr = inp.closest('#t-sales tr[data-id]');
-  if (!tr || !can.edit() || !inp.dataset.f) { cellbar.style.display = 'none'; return; }
+  if (!tr || !can.edit() || !inp.dataset.f || inp.dataset.f === 'upd') { cellbar.style.display = 'none'; return; }
   CB_T = { id: tr.dataset.id, f: inp.dataset.f };
   const rc = inp.getBoundingClientRect();
   cellbar.style.display = 'flex';
@@ -980,8 +983,8 @@ function salesTabLabel() {
     (hasNew ? '<i class="reddot" style="margin-left:6px"></i>' : '');
 }
 /* 화면에서 직접 수정 시 해당 브랜드의 마지막 업데이트 시각 기록 */
-function touchBrand(r) {
-  r.upd = TODAY;                       /* 행별 마지막 업데이트 날짜 (차트 맨 앞 칸 표시용) */
+function touchBrand(r, noStamp) {
+  if (!noStamp) r.upd = TODAY;         /* 행별 마지막 업데이트 날짜 (차트 맨 앞 칸, 직접 수정 가능) */
   const m = UPMETA[r.brand_full] = UPMETA[r.brand_full] || {};
   m.ed = new Date().toISOString();
   if (ROLE === 'DEV') m.ack = m.ed;   /* 개발실 자신의 조작(취소 건 삭제 등)은 알림 대상 아님 */
@@ -1090,9 +1093,11 @@ function drawSales() {
       const cls = r.cancelled ? 'cancelled' : (r.received ? 'recv' : 'pending');
       /* Remark는 자동 생성 없이 사용자가 직접 쓰는 칸 — 변경 내역은 빨간 셀 + 툴팁으로만 표시 */
       const rmk = r.comment !== '' && r.comment != null ? r.comment : (r.remarks || '');
-      const ud = r.upd ? (+r.upd.slice(5, 7)) + '/' + (+r.upd.slice(8, 10)) : '';
+      const ud = r.upd ? (/^\d{4}-\d{2}-\d{2}$/.test(r.upd)
+        ? (+r.upd.slice(5, 7)) + '/' + (+r.upd.slice(8, 10)) : r.upd) : '';
       return `<tr class="${cls}" data-id="${r.id}">
-        <td class="small" style="white-space:nowrap;color:var(--ink2);font-weight:700">${ud}</td>
+        <td class="editing updcell"><input class="cellin upd" data-f="upd" value="${esc(ud)}"
+          ${can.edit() ? '' : 'readonly'}></td>
         <td>${esc(AB(r.brand))}</td>
         ${F(r, 'season')}${F(r, 'stage', 'long')}${F(r, 'xf', 'xf')}${F(r, 'hb', 'num')}${F(r, 'slg', 'num')}
         ${F(r, 'ws_pass', 'long')}${F(r, 'mtrl_sched', 'long')}${F(r, 'status', 'long')}
@@ -1154,7 +1159,7 @@ function drawSales() {
         }
         r[f] = nv;
         if (f === 'comment') r.remarks = nv;   /* Remark는 하나의 값으로 통일 — 지우면 지워진 채 유지 */
-        touchBrand(r);
+        touchBrand(r, f === 'upd');            /* 업데이트 날짜 칸 자체를 고칠 땐 입력값 유지 */
         drawSales(); dirty('requests');
       };
       /* textarea 자동 높이 */
@@ -1655,6 +1660,7 @@ const BR_CODE = { GAP:'GAP', GP:'GAP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UG
 
 const FIELD_OF = h => {
   const t = (h || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (/^update|업데이트/.test(t)) return 'upd';
   if (/^brand/.test(t)) return 'brand';
   if (/^season/.test(t)) return 'season';
   if (/^stage/.test(t)) return 'stage';
@@ -1718,7 +1724,8 @@ function sheetToRecords(rows) {
       season: g('season'), stage: g('stage'), xf: g('xf'),
       hb: num(g('hb')), slg: num(g('slg')), ws_pass: g('ws_pass'),
       mtrl_sched: g('mtrl_sched'), status: g('status'), remarks: g('remarks'),
-      received: !rowYellow };            /* 흰 배경 = 접수 완료 · 노란색 = 미접수 */
+      upd: g('upd'), received: !rowYellow };   /* 흰 배경 = 접수 완료 · 노란색 = 미접수 */
+    if ('upd' in map) rec._hasUpd = 1;         /* 파일에 UPDATE 칸이 있음 — 그 값이 기준 */
     if (!rec.stage && !rec.xf && !rec.hb && !rec.slg) continue;
     /* 파일에서 빨간 글씨로 표시된 칸 기록 → 대시보드 빨간 표시와 1:1 매치 */
     const fonts = row.fonts || {};
@@ -1782,7 +1789,6 @@ async function handleUpload(fileList) {
         }
         if (cur) {
           seen.add(cur.id);
-          const before0 = JSON.stringify(cur);
           const norm = s => String(s ?? '').replace(/\r\n?/g, '\n').trim();
           const prevCh = cur.changes || {};
           const oldRk = norm(cur.comment !== '' && cur.comment != null ? cur.comment : (cur.remarks || ''));
@@ -1824,7 +1830,8 @@ async function handleUpload(fileList) {
           if (kw && !cur.cancelled) { cur.cancelled = true; cur.cxByRemark = true; cur.received = false; }
           else if (!kw && cur.cxByRemark) { cur.cancelled = false; cur.cxByRemark = false; }
           if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
-          if (JSON.stringify(cur) !== before0) cur.upd = TODAY;   /* 이번 업로드로 바뀐 행만 날짜 갱신 */
+          /* 업데이트 날짜는 파일이 기준: 파일에 UPDATE 칸이 있으면 그 값 그대로 (빈칸이면 빈칸) */
+          if (rec._hasUpd) cur.upd = rec.upd || '';
           orderIds.push(cur.id);
         } else {
           const nid = 'U' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1837,11 +1844,11 @@ async function handleUpload(fileList) {
             if (rec._red.remarks && (rec.remarks || '').trim() !== '')
               nch.comment = { from: '(없음)', to: (rec.remarks || '').trim() };
           }
-          delete rec._red;
+          delete rec._red; delete rec._hasUpd;
           R.unshift(Object.assign({
             id: nid, orig: '', season_n: '', stage_n: '', done: false,
             cancelled: kw, cxByRemark: kw || undefined,
-            changes: nch, comment: rec.remarks || '', isNew: true, upd: TODAY
+            changes: nch, comment: rec.remarks || '', isNew: true, upd: ''
           }, rec, kw ? { received: false } : {}));
           seen.add(nid);
           orderIds.push(nid);
@@ -2662,19 +2669,7 @@ setInterval(async () => {
 }, 45000);
 
 snapReq();   /* 초기 로드 스냅샷 (중복 id 교정 포함) */
-/* 2026-10 일회성 정리: GAP(GA) 행 제거 (영업 요청) — 2026-11-30까지만 동작 후 자동 비활성 */
-if (TODAY <= '2026-11-30') {
-  let gone = 0;
-  for (let i = R.length - 1; i >= 0; i--)
-    if ((R[i].brand_full || '').toUpperCase() === 'GAP') { R.splice(i, 1); gone++; }
-  if (gone) {
-    if (UPMETA.GAP) { delete UPMETA.GAP; dirty('up_meta'); }
-    BRANDS.length = 0;
-    [...new Set(R.map(x => x.brand_full))].sort((x, y) => x.localeCompare(y)).forEach(b => BRANDS.push(b));
-    if (!BRANDS.includes(curBrand)) curBrand = BRANDS[0];
-    dirty('requests');
-  }
-}
+/* (2026-10의 GAP 행 일회성 정리 코드는 제거됨 — GAP(GP)은 이제 정식 브랜드) */
 renderAll(); /* 교정된 id로 화면 다시 그리기 */
 sbStatus(SYNC_TS ? '동기화됨' : '오프라인 데이터', SYNC_TS ? 'ok' : 'err');
 
