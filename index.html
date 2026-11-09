@@ -1199,15 +1199,15 @@ function drawSales() {
 }
 
 /* ---------- 엑셀 다운로드 ---------- */
-const XW_W = [3, 9, 10, 30, 14, 8, 8, 24, 18, 22, 40];
+const XW_W = [3, 10, 9, 10, 30, 14, 8, 8, 24, 18, 22, 40];
 function sheetFor(brand) {
   const list = ofBrand(brand).filter(visible);
   const rows = [];
   rows.push([null, { v: brand + '_Sample Plan', s: 6 }]);
-  rows.push([null, null, null, null, null, null, null, null, null, null, { v: TODAY }]);
-  rows.push([null, null, null, null, { v: "Q'ty", s: 1 }, { v: '', s: 1 },
+  rows.push([null, null, null, null, null, null, null, null, null, null, null, { v: TODAY }]);
+  rows.push([null, null, null, null, null, { v: "Q'ty", s: 1 }, { v: '', s: 1 },
              { v: 'Sample ws pass date', s: 1 }, { v: 'MATL Schedule', s: 1 }, { v: 'Status', s: 1 }, { v: '', s: 1 }]);
-  rows.push(['', 'Brand', 'Season', 'Stage', 'XF date', 'HB', 'SLG', T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark')]
+  rows.push(['', 'UPDATE', 'Brand', 'Season', 'Stage', 'XF date', 'HB', 'SLG', T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark')]
             .map((c, i) => i === 0 ? null : { v: c, s: 1 }));
   let hb = 0, slg = 0;
   for (const r of list) {
@@ -1216,17 +1216,18 @@ function sheetFor(brand) {
     const red  = r.cancelled ? 8 : (r.received ? 10 : 5);
     const sty = f => (r.changes[f] ? red : base);
     /* Remark는 사용자가 쓴 내용 그대로 — 변경 내역 자동 문구는 넣지 않음 (변경 셀은 빨간 글씨로 표시) */
-    const auto = changeText(r);
     const remark = [r.cancelled ? '[CANCEL]' : '', r.comment || r.remarks || ''].filter(Boolean).join(' / ');
-    rows.push([null, { v: AB(r.brand), s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
+    const ud = r.upd ? (/^\d{4}-\d{2}-\d{2}$/.test(r.upd)
+      ? (+r.upd.slice(5, 7)) + '/' + (+r.upd.slice(8, 10)) : r.upd) : '';
+    rows.push([null, { v: ud, s: base }, { v: AB(r.brand), s: base }, { v: r.season, s: base }, { v: r.stage, s: base },
       { v: r.xf, s: sty('xf') }, { v: r.hb || '', s: sty('hb') }, { v: r.slg || '', s: sty('slg') },
       { v: r.ws_pass, s: sty('ws_pass') }, { v: r.mtrl_sched || '', s: sty('mtrl_sched') },
       { v: r.status || '', s: sty('status') }, { v: remark, s: sty('comment') }]);
   }
-  rows.push([null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
+  rows.push([null, null, null, null, null, { v: 'TOTAL', s: 1 }, { v: hb, s: 1 }, { v: slg, s: 1 },
              { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }, { v: '', s: 1 }]);
-  /* printCol: 'K'(Remark)까지 인쇄 영역 + 가로 인쇄 */
-  return { name: brand, cols: XW_W, rows, rowHeight: 29.25, headRows: 2, printCol: 'K' };
+  /* printCol: 'L'(Remark)까지 인쇄 영역 + 가로 인쇄 */
+  return { name: brand, cols: XW_W, rows, rowHeight: 29.25, headRows: 2, printCol: 'L' };
 }
 function saveXlsx(sheets, name) {
   const url = URL.createObjectURL(new Blob([XW.build(sheets)],
@@ -1654,7 +1655,8 @@ function renderAll() {
 renderAll();
 
 /* ---------- 엑셀 업로드 → Sample Plan 반영 ---------- */
-const BR_CODE = { GAP:'GAP', GP:'GAP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UGG', ST:'STAUD', STAUD:'STAUD',
+/* GAP은 내부명도 'GP' 사용 — 과거 배포본에 남아 있는 'GAP' 행 자동삭제 코드의 영향권 밖으로 */
+const BR_CODE = { GAP:'GP', GP:'GP', BE:'BEIS', BEIS:'BEIS', UG:'UGG', UGG:'UGG', ST:'STAUD', STAUD:'STAUD',
   AM:'AMAZON', AMAZON:'AMAZON', CH:'CH', ME:'MEEM', MEEM:'MEEM', GF:'GUESS', GS:'GUESS', GUESS:'GUESS',
   TU:'TOUS', TOUS:'TOUS', SN:'STANLEY', STANLEY:'STANLEY', QN:'QUINCE', QUINCE:'QUINCE' };
 
@@ -1959,7 +1961,7 @@ const DEV_FIELD = h => {
   if (/^line/.test(t)) return 'line';
   return null;
 };
-const PFX = [['GAP','GAP'],['GP','GAP'],['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
+const PFX = [['GAP','GP'],['GP','GP'],['GF','GUESS'],['GS','GUESS'],['ST','STAUD'],['CH','CH'],['TU','TOUS'],['AM','AMAZON'],
              ['BE','BEIS'],['SN','STANLEY'],['ME','MEEM'],['KE','KEEK'],['QU','QUINCE'],
              ['MJ','MARC JACOB'],['UG','UGG']];
 
