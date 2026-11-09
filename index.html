@@ -1746,7 +1746,7 @@ async function handleUpload(fileList) {
   const box = el('upload-log');
   box.style.display = 'block';
   box.innerHTML = '<span class="muted">읽는 중…</span>';
-  let added = 0, updated = 0, changedCells = 0, files = 0, brands = new Set(), note = '', xlsWarn = false, removed = 0;
+  let added = 0, updated = 0, changedCells = 0, files = 0, brands = new Set(), note = '', xlsWarn = false, removed = 0, redone = 0;
   try {
     for (const file of fileList) {
       if (/\.xls$/i.test(file.name)) { xlsWarn = true; continue; }
@@ -1832,6 +1832,8 @@ async function handleUpload(fileList) {
           if (kw && !cur.cancelled) { cur.cancelled = true; cur.cxByRemark = true; cur.received = false; }
           else if (!kw && cur.cxByRemark) { cur.cancelled = false; cur.cxByRemark = false; }
           if (!cur.cancelled) cur.received = rec.received;   /* 파일 배경색 기준 접수 상태 동기화 */
+          /* 파일에 있는 행은 진행 중 — 완료로 숨겨져 있던 행이면 다시 보이게 해제 */
+          if (cur.done) { cur.done = false; redone++; }
           /* 업데이트 날짜는 파일이 기준: 파일에 UPDATE 칸이 있으면 그 값 그대로 (빈칸이면 빈칸) */
           if (rec._hasUpd) cur.upd = rec.upd || '';
           orderIds.push(cur.id);
@@ -1883,7 +1885,7 @@ async function handleUpload(fileList) {
     }
     drawChips(); drawSales(); dirty('requests');
     box.innerHTML = `<b>✔ 반영 완료</b> — 파일 ${files}개 · 브랜드 ${[...brands].join(', ')} ·
-      신규 <b>${added}</b>행 추가, <b>${updated}</b>행 갱신${removed ? `, 파일에 없는 <b>${removed}</b>행 정리` : ''} (변경 셀 ${changedCells}개는 빨간 글씨로 표시)
+      신규 <b>${added}</b>행 추가, <b>${updated}</b>행 갱신${removed ? `, 파일에 없는 <b>${removed}</b>행 정리` : ''}${redone ? `, 완료 숨김 해제 <b>${redone}</b>행` : ''} (변경 셀 ${changedCells}개는 빨간 글씨로 표시)
       ${note ? '<br><span class="muted">' + esc(note) + '</span>' : ''}
       ${xlsWarn ? '<br><span style="color:var(--critical)">샘플 펜딩 파일(.xls)은 .xlsx로 저장해서 올려주세요.</span>' : ''}`;
   } catch (e) {
