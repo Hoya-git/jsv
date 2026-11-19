@@ -1205,7 +1205,8 @@ function sheetFor(brand) {
   const rows = [];
   rows.push([null, { v: brand + '_Sample Plan', s: 6 }]);
   rows.push([null, null, null, null, null, null, null, null, null, null, null, { v: TODAY }]);
-  rows.push([null, null, null, null, null, { v: "Q'ty", s: 1 }, { v: '', s: 1 },
+  /* 3행 상단 제목: A(여백) B(UPDATE) C(Brand) D(Season) E(Stage) F(XF) | G·H=Q'ty, I=ws pass, J=MATL, K=Status, L=(Remarks) */
+  rows.push([null, null, null, null, null, null, { v: "Q'ty", s: 1 }, { v: '', s: 1 },
              { v: 'Sample ws pass date', s: 1 }, { v: 'MATL Schedule', s: 1 }, { v: 'Status', s: 1 }, { v: '', s: 1 }]);
   rows.push(['', 'UPDATE', 'Brand', 'Season', 'Stage', 'XF date', 'HB', 'SLG', T('c_ws'), T('c_mtrl'), T('c_status'), T('c_remark')]
             .map((c, i) => i === 0 ? null : { v: c, s: 1 }));
